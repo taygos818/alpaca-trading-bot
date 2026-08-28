@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 import time
 from collections import Counter, deque
@@ -16,8 +17,9 @@ from flask import Flask, jsonify, Response, render_template
 
 
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=str(Path(__file__).resolve().parent / "templates"))
 TRADE_LOG_PATH = Path(os.getenv("TRADE_LOG_PATH", "/app/logs/trades.jsonl"))
+DECISION_TRACE_PATH = Path(os.getenv("DECISION_TRACE_PATH", "/app/logs/decision-traces.jsonl"))
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 TRADE_COUNTER = Counter()
@@ -117,12 +119,18 @@ def paper_dashboard():
     return render_template("paper.html")
 
 
+@app.route("/agents")
+def agent_dashboard():
+    return render_template("agents.html")
+
+
 @app.get("/health")
 def health():
     return jsonify(
         {
             "status": "ok",
             "trade_log_exists": TRADE_LOG_PATH.exists(),
+            "decision_trace_exists": DECISION_TRACE_PATH.exists(),
             "postgres_configured": bool(POSTGRES_DSN),
         }
     )
@@ -240,7 +248,6 @@ def alpaca_info():
             "cash": float(account.get("cash", 0.0)),
             "buying_power": float(account.get("buying_power", 0.0)),
             "portfolio_value": float(account.get("portfolio_value", 0.0)),
-            "account_number": account.get("account_number"),
             "paper_trade": account.get("paper_trade", False),
             "total_unrealized_pnl": round(total_unrealized_pnl, 2),
         },
@@ -258,6 +265,145 @@ def alpaca_info():
             for pos in positions
         ]
     })
+
+
+def load_decision_records(limit: int = 100):
+    if limit <= 0 or not DECISION_TRACE_PATH.exists():
+        return []
+    latest = {}
+    try:
+        with DECISION_TRACE_PATH.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                item = json.loads(line)
+                trace_id = item.get("trace_id")
+                if isinstance(trace_id, str) and trace_id:
+                    latest[trace_id] = item
+    except (OSError, json.JSONDecodeError):
+        return []
+    ordered = sorted(latest.values(), key=lambda item: str(item.get("recorded_at", "")), reverse=True)
+    return ordered[:limit]
+
+
+def public_decision_record(record):
+    trace = record.get("trace") if isinstance(record.get("trace"), dict) else {}
+    analyses = trace.get("analyses") if isinstance(trace.get("analyses"), list) else []
+    proposals = trace.get("proposals") if isinstance(trace.get("proposals"), list) else []
+    objections = trace.get("objections") if isinstance(trace.get("objections"), list) else []
+    authorizations = trace.get("authorizations") if isinstance(trace.get("authorizations"), list) else []
+    events = trace.get("order_events") if isinstance(trace.get("order_events"), list) else []
+    assessments = trace.get("assessments") if isinstance(trace.get("assessments"), list) else []
+    evidence = trace.get("evidence") if isinstance(trace.get("evidence"), list) else []
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    return {
+        "trace_id": record.get("trace_id"),
+        "phase": record.get("phase", "unknown"),
+        "outcome": record.get("outcome", "unknown"),
+        "fingerprint": record.get("fingerprint", ""),
+        "recorded_at": record.get("recorded_at"),
+        "opportunity_rankings": metadata.get("opportunity_rankings", []),
+        "agents": [
+            {
+                "name": item.get("agent_name"),
+                "direction": item.get("direction"),
+                "confidence": item.get("confidence"),
+                "disposition": item.get("disposition"),
+                "thesis": item.get("thesis"),
+                "contradictions": item.get("contradictions", []),
+                "citation_count": len(item.get("cited_evidence_ids", [])),
+            }
+            for item in analyses
+        ],
+        "proposals": [
+            {
+                "id": item.get("record_id"),
+                "underlying": item.get("underlying"),
+                "direction": item.get("direction"),
+                "strategy": item.get("strategy_name"),
+                "quantity": item.get("contract_quantity"),
+                "limit_debit": item.get("limit_debit"),
+                "maximum_loss": item.get("maximum_loss"),
+                "rationale": item.get("rationale"),
+                "legs": [
+                    {
+                        "symbol": leg.get("option_symbol"),
+                        "side": leg.get("side"),
+                        "right": leg.get("right"),
+                        "strike": leg.get("strike"),
+                        "expiration": leg.get("expiration"),
+                    }
+                    for leg in item.get("legs", [])
+                ],
+            }
+            for item in proposals
+        ],
+        "risk_decisions": [
+            {
+                "proposal_id": item.get("proposal_id"),
+                "decision": item.get("decision"),
+                "quantity": item.get("authorized_quantity"),
+                "maximum_loss": item.get("authorized_maximum_loss"),
+                "reason": item.get("reason"),
+                "expires_at": item.get("expires_at"),
+            }
+            for item in authorizations
+        ],
+        "rejections": [
+            item.get("reason") for item in authorizations if item.get("decision") == "reject"
+        ] + [item.get("objection") for item in objections if item.get("blocking")],
+        "positions": [
+            {
+                "key": item.get("position_key"),
+                "state": item.get("state"),
+                "quantity": item.get("quantity"),
+                "mark_value": item.get("mark_value"),
+                "unrealized_pnl": item.get("unrealized_pnl"),
+                "exit_reasons": item.get("exit_reasons", []),
+                "assessed_at": item.get("assessed_at"),
+            }
+            for item in assessments
+        ],
+        "orders": [
+            {
+                "status": item.get("status"),
+                "filled_quantity": item.get("filled_quantity"),
+                "average_fill_price": item.get("average_fill_price"),
+                "broker_timestamp": item.get("broker_timestamp"),
+            }
+            for item in events
+        ],
+        "provenance": [
+            {
+                "provider": item.get("provider"),
+                "instrument": item.get("instrument"),
+                "value_name": item.get("value_name"),
+                "event_time": item.get("event_time"),
+                "received_at": item.get("received_at"),
+                "source_uri": item.get("source_uri"),
+                "entitlement": item.get("entitlement"),
+                "authority": item.get("authority"),
+                "is_fresh": item.get("is_fresh"),
+            }
+            for item in evidence
+        ],
+    }
+
+
+@app.get("/api/agent-decisions")
+def agent_decisions():
+    records = [public_decision_record(item) for item in load_decision_records()]
+    return jsonify({"status": "ok", "count": len(records), "records": records})
+
+
+@app.get("/api/agent-decisions/<trace_id>")
+def agent_decision(trace_id):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", trace_id):
+        return jsonify({"status": "error", "message": "Invalid trace ID"}), 400
+    record = next((item for item in load_decision_records(limit=1000) if item.get("trace_id") == trace_id), None)
+    if record is None:
+        return jsonify({"status": "not_found"}), 404
+    return jsonify({"status": "ok", "record": public_decision_record(record)})
 
 
 def compute_fifo_trades(trades_list):

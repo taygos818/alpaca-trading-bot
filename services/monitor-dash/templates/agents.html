@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alpaca Agent Decision Console</title>
+  <style>
+    :root { --ink:#172026; --muted:#64727a; --paper:#f4f1e8; --card:#fffdf7; --line:#d9d3c4; --green:#0f6b55; --amber:#b86b11; --red:#a33a32; --blue:#255f85; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:radial-gradient(circle at 85% 5%,#dce9df 0,transparent 28%),var(--paper); font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    header { padding:28px clamp(20px,5vw,72px) 22px; border-bottom:1px solid var(--line); background:rgba(255,253,247,.82); backdrop-filter:blur(12px); position:sticky; top:0; z-index:2; }
+    .brand { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+    .eyebrow { color:var(--green); font:700 12px/1.2 ui-monospace,monospace; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:7px 0 3px; font:750 clamp(25px,4vw,42px)/1.05 Georgia,serif; }
+    .subtitle { color:var(--muted); max-width:760px; font-size:14px; }
+    .paper-pill { border:1px solid #9ac8b7; color:var(--green); background:#edf8f3; border-radius:999px; padding:8px 12px; font-weight:750; font-size:12px; white-space:nowrap; }
+    main { padding:24px clamp(20px,5vw,72px) 56px; max-width:1600px; margin:auto; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+    .stat,.panel { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 30px rgba(42,53,48,.05); }
+    .stat { padding:15px 17px; }
+    .stat span { display:block; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-size:10px; font-weight:800; }
+    .stat strong { display:block; margin-top:6px; font:750 24px/1 Georgia,serif; }
+    .layout { display:grid; grid-template-columns:minmax(260px,340px) minmax(0,1fr); gap:16px; align-items:start; }
+    .panel { overflow:hidden; }
+    .panel-head { padding:15px 17px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    .panel-head h2 { margin:0; font-size:14px; }
+    .trace-list { max-height:72vh; overflow:auto; }
+    button.trace { width:100%; border:0; border-bottom:1px solid var(--line); background:transparent; padding:14px 17px; text-align:left; cursor:pointer; color:inherit; }
+    button.trace:hover,button.trace.active { background:#f0f5ef; }
+    .trace-top { display:flex; justify-content:space-between; gap:8px; font-size:12px; font-weight:750; }
+    .trace-id { margin-top:6px; font:11px ui-monospace,monospace; color:var(--muted); overflow:hidden; text-overflow:ellipsis; }
+    .badge { display:inline-flex; padding:3px 7px; border-radius:999px; font-size:10px; font-weight:800; text-transform:uppercase; background:#e8edf0; color:#40515b; }
+    .badge.submitted,.badge.open,.badge.approve { color:var(--green); background:#e4f3ed; }
+    .badge.reject,.badge.rejected,.badge.blocked { color:var(--red); background:#f7e7e5; }
+    .badge.dry_run,.badge.preview,.badge.reduce { color:var(--amber); background:#fbefd9; }
+    .detail { padding:18px; min-height:520px; }
+    .empty { min-height:420px; display:grid; place-items:center; color:var(--muted); text-align:center; padding:40px; }
+    .empty strong { color:var(--ink); display:block; font:700 22px Georgia,serif; margin-bottom:7px; }
+    .decision-head { display:flex; gap:12px; justify-content:space-between; align-items:flex-start; padding-bottom:16px; border-bottom:1px solid var(--line); }
+    .decision-head h2 { margin:0 0 6px; font:750 24px Georgia,serif; }
+    .mono { font:11px ui-monospace,monospace; color:var(--muted); word-break:break-all; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:14px; }
+    .section { border:1px solid var(--line); border-radius:11px; padding:14px; background:#fff; }
+    .section.wide { grid-column:1/-1; }
+    .section h3 { margin:0 0 11px; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+    .item { padding:10px 0; border-top:1px solid #ece8dd; }
+    .item:first-of-type { border-top:0; padding-top:0; }
+    .row { display:flex; gap:8px; justify-content:space-between; align-items:center; }
+    .item-title { font-weight:780; font-size:13px; }
+    .copy { color:#3d4b52; font-size:12px; line-height:1.5; margin-top:6px; }
+    .metrics { font:11px ui-monospace,monospace; color:var(--blue); margin-top:6px; }
+    .leg { display:inline-block; margin:6px 5px 0 0; border:1px solid #cfd8dc; border-radius:6px; padding:4px 6px; font:10px ui-monospace,monospace; background:#f6f8f8; }
+    .source { display:grid; grid-template-columns:90px 1fr auto; gap:9px; align-items:center; font-size:11px; padding:7px 0; border-top:1px solid #ece8dd; }
+    .fresh { color:var(--green); font-weight:800; }
+    .stale { color:var(--red); font-weight:800; }
+    @media(max-width:900px){ .stats{grid-template-columns:repeat(2,1fr)} .layout{grid-template-columns:1fr} .trace-list{max-height:300px} }
+    @media(max-width:620px){ .brand{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr}.section.wide{grid-column:auto}.stats{grid-template-columns:1fr 1fr}.source{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div><div class="eyebrow">Autonomous options agent / decision audit</div><h1>Why the agent acted—or abstained.</h1><div class="subtitle">A read-only reconstruction of evidence, independent agent findings, structure selection, deterministic risk vetoes, orders, positions, exits, and source provenance.</div></div>
+      <div class="paper-pill">PAPER ACCOUNT ONLY</div>
+    </div>
+  </header>
+  <main>
+    <div class="stats">
+      <div class="stat"><span>Decision traces</span><strong id="traceCount">0</strong></div>
+      <div class="stat"><span>Proposals</span><strong id="proposalCount">0</strong></div>
+      <div class="stat"><span>Risk rejections</span><strong id="rejectCount">0</strong></div>
+      <div class="stat"><span>Reconciled orders</span><strong id="orderCount">0</strong></div>
+    </div>
+    <div class="layout">
+      <aside class="panel"><div class="panel-head"><h2>Recent decisions</h2><span class="badge" id="loadState">loading</span></div><div class="trace-list" id="traceList"></div></aside>
+      <section class="panel"><div class="detail" id="detail"><div class="empty"><div><strong>No decision selected</strong>Select a persisted trace to reconstruct the agent workflow.</div></div></div></section>
+    </div>
+  </main>
+  <script>
+    const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const badge=v=>`<span class="badge ${esc(v)}">${esc(String(v||'unknown').replaceAll('_',' '))}</span>`;
+    const money=v=>v===undefined||v===null||v===''?'—':`$${Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    let records=[];
+    function renderList(){
+      const list=document.getElementById('traceList');
+      if(!records.length){list.innerHTML='<div class="empty"><div><strong>No persisted traces yet</strong>The dashboard remains truthful and empty until a shadow or paper cycle writes a decision trace.</div></div>';return;}
+      list.innerHTML=records.map((r,i)=>`<button class="trace ${i===0?'active':''}" data-index="${i}"><div class="trace-top"><span>${esc(r.proposals[0]?.underlying||'No proposal')}</span>${badge(r.outcome)}</div><div class="trace-id">${esc(r.trace_id)}</div></button>`).join('');
+      list.querySelectorAll('button').forEach(b=>b.onclick=()=>{list.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderDetail(records[Number(b.dataset.index)]);});
+      renderDetail(records[0]);
+    }
+    function items(values,fn,empty='None recorded'){return values?.length?values.map(fn).join(''):`<div class="copy">${empty}</div>`;}
+    function renderDetail(r){
+      const agents=items(r.agents,a=>`<div class="item"><div class="row"><div class="item-title">${esc(a.name)}</div>${badge(a.disposition)}</div><div class="metrics">${esc(a.direction)} · confidence ${esc(a.confidence)} · ${a.citation_count} citations</div><div class="copy">${esc(a.thesis)}</div>${a.contradictions?.length?`<div class="copy">Contradictions: ${esc(a.contradictions.join('; '))}</div>`:''}</div>`,'No agent analysis crossed the data-quality gate.');
+      const proposals=items(r.proposals,p=>`<div class="item"><div class="row"><div class="item-title">${esc(p.underlying)} · ${esc(p.strategy)}</div>${badge(p.direction)}</div><div class="metrics">qty ${esc(p.quantity)} · debit ${money(p.limit_debit)} · max loss ${money(p.maximum_loss)}</div><div>${(p.legs||[]).map(l=>`<span class="leg">${esc(l.side)} ${esc(l.symbol)} @ ${esc(l.strike)}</span>`).join('')}</div><div class="copy">${esc(p.rationale)}</div></div>`,'The agents abstained or no liquid structure passed.');
+      const risks=items(r.risk_decisions,d=>`<div class="item"><div class="row"><div class="item-title">${esc(d.reason)}</div>${badge(d.decision)}</div><div class="metrics">qty ${esc(d.quantity)} · authorized max loss ${money(d.maximum_loss)}</div></div>`,'No proposal reached portfolio risk.');
+      const positions=items(r.positions,p=>`<div class="item"><div class="row"><div class="item-title">${esc(p.key)}</div>${badge(p.state)}</div><div class="metrics">qty ${esc(p.quantity)} · mark ${money(p.mark_value)} · P&L ${money(p.unrealized_pnl)}</div><div class="copy">Exit status: ${esc((p.exit_reasons||[]).join(', ')||'not due')}</div></div>`,'No reconciled position.');
+      const sources=items(r.provenance,s=>`<div class="source"><b>${esc(s.provider)}</b><span>${esc(s.instrument)} · ${esc(s.value_name)} · ${esc(s.authority||'research')}</span><span class="${s.is_fresh?'fresh':'stale'}">${s.is_fresh?'fresh':'stale'}</span></div>`,'No evidence was frozen.');
+      document.getElementById('detail').innerHTML=`<div class="decision-head"><div><h2>${esc(r.proposals[0]?.underlying||'Abstention / no proposal')}</h2><div class="mono">${esc(r.trace_id)}<br>${esc(r.fingerprint)}</div></div><div>${badge(r.phase)} ${badge(r.outcome)}</div></div><div class="grid"><div class="section"><h3>Independent agent findings</h3>${agents}</div><div class="section"><h3>Chosen structures</h3>${proposals}</div><div class="section"><h3>Deterministic risk</h3>${risks}</div><div class="section"><h3>Position and exit status</h3>${positions}</div><div class="section wide"><h3>Evidence provenance</h3>${sources}</div></div>`;
+    }
+    async function load(){
+      try{const res=await fetch('/api/agent-decisions');const data=await res.json();records=data.records||[];document.getElementById('loadState').textContent='read only';document.getElementById('traceCount').textContent=records.length;document.getElementById('proposalCount').textContent=records.reduce((n,r)=>n+r.proposals.length,0);document.getElementById('rejectCount').textContent=records.reduce((n,r)=>n+r.rejections.length,0);document.getElementById('orderCount').textContent=records.reduce((n,r)=>n+r.orders.length,0);renderList();}catch(e){document.getElementById('loadState').textContent='unavailable';document.getElementById('traceList').innerHTML='<div class="empty"><div><strong>Trace data unavailable</strong>The dashboard did not substitute demo data.</div></div>';}}
+    load(); setInterval(load,15000);
+  </script>
+</body>
+</html>

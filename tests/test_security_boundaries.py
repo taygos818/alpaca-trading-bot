@@ -42,6 +42,17 @@ def test_mcp_is_paper_only_local_and_profile_gated():
     assert ".env.paper.secrets" in mcp_section
 
 
+def test_dashboard_is_loopback_read_only_and_receives_no_credentials():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    dashboard = compose.split("  monitor-dash:", 1)[1].split("\nvolumes:", 1)[0]
+    assert "127.0.0.1:${PAPER_DASHBOARD_PORT:-8090}:8090" in dashboard
+    assert "./paper-logs/strategy-engine:/app/logs:ro" in dashboard
+    assert ".env.paper.secrets" not in dashboard
+    assert "ALPACA_API_KEY" not in dashboard
+    assert "ALPACA_SECRET_KEY" not in dashboard
+    assert "FEATHERLESS_API_KEY" not in dashboard
+
+
 def test_obsolete_ai_modules_and_live_artifacts_are_absent():
     assert not (ROOT / "services/strategy-engine/ai_committee.py").exists()
     assert not (ROOT / "services/strategy-engine/ai_market_analyzer.py").exists()

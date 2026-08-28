@@ -121,6 +121,21 @@ services:
       redis: {condition: service_healthy}
       scheduler: {condition: service_started}
 
+  monitor-dash:
+    build: ./services/monitor-dash
+    restart: unless-stopped
+    environment:
+      DECISION_TRACE_PATH: /app/logs/decision-traces.jsonl
+      TRADE_LOG_PATH: /app/logs/trades.jsonl
+      ACTIVE_BROKER: alpaca
+      ALPACA_PAPER_TRADE: "true"
+      TRADING_LANE: options_paper
+      BOT_STRATEGY: defined_risk_options
+    volumes:
+      - ./paper-logs/strategy-engine:/app/logs:ro
+    ports:
+      - "127.0.0.1:${PAPER_DASHBOARD_PORT:-8090}:8090"
+
 volumes:
   alpaca_agent_postgres_data:
   alpaca_agent_redis_data:

@@ -330,10 +330,12 @@ def test_cycle_runner_persists_coordinator_to_preview_trace(tmp_path):
         portfolio=SimpleNamespace(),
         now=NOW,
         environment={"AGENT_COORDINATOR_ENABLED": "true"},
+        display_metadata={"opportunity_rankings": [{"symbol": "ANF", "rank": 1}]},
     )
     assert result.launches[0].mode == "dry_run"
     assert result.trace.replay_fingerprint == base_trace.replay_fingerprint
     assert journal.load_latest()[0].outcome == "dry_run"
+    assert journal.load_latest()[0].metadata["opportunity_rankings"][0]["symbol"] == "ANF"
 
 
 def test_cycle_runner_persists_exit_ownership_on_reconciled_fill(tmp_path):

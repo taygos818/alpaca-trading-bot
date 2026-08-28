@@ -13,4 +13,6 @@ For any paper-execution anomaly:
 
 For the contest options strategy, set `DEFINED_RISK_OPTIONS_ENABLED=false` to stop new proposals. This does not delete active exit plans. Position reconciliation and deterministic exit assessment continue until every paper position is closed or explicitly handed off.
 
+The `monitor-dash` service is observation-only. It can be stopped or reverted independently because it has no credentials, writable strategy volume, or execution route.
+
 Rollback never operates on the separate `trading-bot-us` repository or its live services.

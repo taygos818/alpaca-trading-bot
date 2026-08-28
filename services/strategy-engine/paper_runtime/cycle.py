@@ -35,7 +35,16 @@ class PaperAgentCycleRunner:
         self.exit_plan_factory = ExitPlanFactory()
         self.position_agent = PositionAnalysisAgent()
 
-    def run_cycle(self, *, trace_id, evidence, portfolio: PortfolioSnapshot, now: datetime, environment=None):
+    def run_cycle(
+        self,
+        *,
+        trace_id,
+        evidence,
+        portfolio: PortfolioSnapshot,
+        now: datetime,
+        environment=None,
+        display_metadata=None,
+    ):
         result = self.coordinator.run_shadow_cycle(
             trace_id=trace_id,
             evidence=evidence,
@@ -93,17 +102,19 @@ class PaperAgentCycleRunner:
         dry_runs = sum(1 for item in launches if item.mode == "dry_run")
         phase = "broker_reconciled" if submitted else "preview"
         outcome = "submitted" if submitted else ("dry_run" if dry_runs else "no_authorized_trade")
+        metadata = {
+            "proposal_count": len(result.proposals),
+            "rejection_reasons": [
+                item.reason for item in result.authorizations if item.decision.value == "reject"
+            ],
+            "duplicate_proposal_ids": list(result.duplicate_proposal_ids),
+        }
+        metadata.update(display_metadata or {})
         self.journal.append(
             trace,
             phase=phase,
             outcome=outcome,
-            metadata={
-                "proposal_count": len(result.proposals),
-                "rejection_reasons": [
-                    item.reason for item in result.authorizations if item.decision.value == "reject"
-                ],
-                "duplicate_proposal_ids": list(result.duplicate_proposal_ids),
-            },
+            metadata=metadata,
             recorded_at=now,
         )
         return PaperCycleResult(result, tuple(launches), trace)
