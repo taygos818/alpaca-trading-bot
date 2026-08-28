@@ -48,9 +48,9 @@ Acceptance: no uncovered exposure; whole-contract sizing; limit orders; expirati
 
 Rollback: disable the options strategy and reconcile existing paper positions under their persisted exit plans.
 
-## Milestone 6 — Replay, shadow, and paper canary
+## Milestone 6 — Replay, smoke validation, and paper launch
 
-Progress through historical replay, frozen scenarios, live-market shadow, CLI dry-run, bounded paper submissions, autonomous lifecycle, restart tests, partial fills, and provider outages.
+Progress through historical replay, frozen scenarios, live-market shadow, CLI dry-run, bounded paper submissions, autonomous lifecycle, restart tests, partial fills, and provider outages. These are deterministic same-session release gates, not multi-day canary or burn-in periods.
 
 Acceptance: complete evidence-to-exit trace for every proposal and trade; no unresolved broker state.
 

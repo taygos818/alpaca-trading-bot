@@ -190,6 +190,12 @@ class EvidenceItem:
     source_uri: str = ""
     entitlement: str = "unknown"
     is_fresh: bool = False
+    authority: str = "research"
+    session: str = "unknown"
+    temporal_kind: str = "observed"
+    transformation_version: str = "raw-v1"
+    numeric_value: Decimal | None = None
+    vintage: str = ""
     schema_version: str = CONTRACT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -198,7 +204,7 @@ class EvidenceItem:
             _require_text(name, getattr(self, name))
         _require_utc("event_time", self.event_time)
         _require_utc("received_at", self.received_at)
-        if self.received_at < self.event_time:
+        if self.temporal_kind == "observed" and self.received_at < self.event_time:
             raise ContractValidationError("received_at cannot precede event_time")
         if self.created_at < self.received_at:
             raise ContractValidationError("created_at cannot precede received_at")
@@ -206,6 +212,15 @@ class EvidenceItem:
             raise ContractValidationError("raw_sha256 must be a lowercase SHA-256 digest")
         if not isinstance(self.is_fresh, bool):
             raise ContractValidationError("is_fresh must be a boolean")
+        if self.authority not in {"broker_truth", "licensed_research", "unofficial_research", "macro_research", "research"}:
+            raise ContractValidationError("unsupported evidence authority")
+        if self.session not in {"premarket", "regular", "postmarket", "overnight", "daily", "event", "unknown"}:
+            raise ContractValidationError("unsupported evidence session")
+        if self.temporal_kind not in {"observed", "scheduled", "historical", "release"}:
+            raise ContractValidationError("unsupported temporal_kind")
+        _require_text("transformation_version", self.transformation_version)
+        if self.numeric_value is not None:
+            _require_decimal("numeric_value", self.numeric_value, minimum=None)
 
 
 @dataclass(frozen=True, slots=True)

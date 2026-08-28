@@ -38,15 +38,29 @@ def stable_id(prefix: str, *parts: str) -> str:
 class DataQualityAgent:
     name = "data_quality"
 
+    def __init__(self, quality_engine=None) -> None:
+        self._quality_engine = quality_engine
+
     def freeze(self, trace_id: str, evidence: tuple[EvidenceItem, ...], now: datetime) -> EvidenceBundle:
         if not evidence:
             raise ContractValidationError("data agent requires evidence")
         if any(item.trace_id != trace_id for item in evidence):
             raise ContractValidationError("evidence trace_id mismatch")
-        stale = sorted(item.record_id for item in evidence if not item.is_fresh)
-        if stale:
-            raise ContractValidationError(f"stale evidence cannot be frozen: {','.join(stale)}")
-        ordered = tuple(sorted(evidence, key=lambda item: item.record_id))
+        if self._quality_engine is not None:
+            report = self._quality_engine.evaluate(evidence, now)
+            if report.veto:
+                details = [*report.rejected_ids]
+                details.extend(
+                    f"{item.instrument}:{item.value_name}:{item.left_provider}!={item.right_provider}"
+                    for item in report.disagreements
+                )
+                raise ContractValidationError(f"data-quality veto: {','.join(details)}")
+            ordered = report.accepted
+        else:
+            stale = sorted(item.record_id for item in evidence if not item.is_fresh)
+            if stale:
+                raise ContractValidationError(f"stale evidence cannot be frozen: {','.join(stale)}")
+            ordered = tuple(sorted(evidence, key=lambda item: item.record_id))
         evidence_fingerprint = contract_fingerprint(ordered)
         return EvidenceBundle(
             record_id=stable_id("bundle", trace_id, evidence_fingerprint),

@@ -19,6 +19,9 @@ def test_compose_is_isolated_and_paper_only():
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in compose
     assert "AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}" in compose
     assert "AGENT_COORDINATOR_SHADOW_MODE: ${AGENT_COORDINATOR_SHADOW_MODE:-true}" in compose
+    assert "FINNHUB_ENABLED: ${FINNHUB_ENABLED:-false}" in compose
+    assert "YFINANCE_ENABLED: ${YFINANCE_ENABLED:-false}" in compose
+    assert "FRED_ENABLED: ${FRED_ENABLED:-false}" in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
     assert "alpaca_agent_postgres_data" in compose
     assert "alpaca_agent_redis_data" in compose
@@ -55,6 +58,9 @@ def test_agent_coordinator_is_credential_free_and_cli_gateway_is_narrow():
     assert "subprocess" not in agent_source
     assert "shell=False" in gateway_source
     assert 'forbidden = {"api", "close-all", "cancel-all", "locate"}' in gateway_source
+    assert "finnhub" not in gateway_source.lower()
+    assert "yfinance" not in gateway_source.lower()
+    assert "fred" not in gateway_source.lower()
 
 
 def test_default_test_run_cannot_load_local_secret_file():
