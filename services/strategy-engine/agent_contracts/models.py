@@ -512,6 +512,44 @@ class AuthorizedExecution:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthorizedExit:
+    """Exact position-reducing limit command derived from a persisted exit plan."""
+
+    record_id: str
+    trace_id: str
+    exit_plan_id: str
+    client_order_id: str
+    original_legs: tuple[OptionLeg, ...]
+    closing_legs: tuple[OptionLeg, ...]
+    quantity: int
+    limit_credit: Decimal
+    created_at: datetime
+    schema_version: str = CONTRACT_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        _validate_common(self.schema_version, self.trace_id, self.record_id, self.created_at)
+        _require_id("exit_plan_id", self.exit_plan_id)
+        _require_id("client_order_id", self.client_order_id)
+        _require_tuple("original_legs", self.original_legs)
+        _require_tuple("closing_legs", self.closing_legs)
+        if len(self.original_legs) not in {1, 2} or len(self.original_legs) != len(self.closing_legs):
+            raise ContractValidationError("exit must close one long option or one two-leg spread")
+        if not isinstance(self.quantity, int) or isinstance(self.quantity, bool) or self.quantity <= 0:
+            raise ContractValidationError("exit quantity must be a positive whole number")
+        _require_decimal("limit_credit", self.limit_credit, positive=True)
+        for original, closing in zip(self.original_legs, self.closing_legs):
+            if (
+                original.option_symbol != closing.option_symbol
+                or original.right is not closing.right
+                or original.strike != closing.strike
+                or original.expiration != closing.expiration
+                or original.quantity != closing.quantity
+                or original.side is closing.side
+            ):
+                raise ContractValidationError("closing legs must exactly reverse the persisted position legs")
+
+
+@dataclass(frozen=True, slots=True)
 class OrderEvent:
     record_id: str
     trace_id: str

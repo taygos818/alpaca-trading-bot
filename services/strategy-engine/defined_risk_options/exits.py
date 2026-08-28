@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import threading
 
-from agent_contracts import OptionsProposal, canonical_json
+from agent_contracts import AuthorizedExit, LegSide, OptionLeg, OptionsProposal, canonical_json
 
 from .models import DefinedRiskOptionsConfig, ExitDecision, ExitPlan, ExitPlanState
 
@@ -85,6 +85,37 @@ class ExitDecisionEngine:
         return ExitDecision(bool(reasons), tuple(reasons), limit_credit)
 
 
+class ExitCommandFactory:
+    def for_due_plan(self, plan: ExitPlan, decision: ExitDecision, now: datetime) -> AuthorizedExit:
+        if not decision.should_exit or not decision.reasons or decision.limit_credit <= 0:
+            raise ValueError("exit command requires a due plan and positive limit credit")
+        closing = tuple(
+            OptionLeg(
+                option_symbol=leg.option_symbol,
+                side=LegSide.SELL if leg.side is LegSide.BUY else LegSide.BUY,
+                right=leg.right,
+                quantity=leg.quantity,
+                strike=leg.strike,
+                expiration=leg.expiration,
+            )
+            for leg in plan.legs
+        )
+        digest = hashlib.sha256(
+            f"{plan.plan_id}:{plan.quantity}:{decision.limit_credit}:{','.join(decision.reasons)}".encode()
+        ).hexdigest()[:24]
+        return AuthorizedExit(
+            record_id=f"exit-command.{digest}",
+            trace_id=f"trace.exit.{digest}",
+            exit_plan_id=plan.plan_id,
+            client_order_id=f"agent-exit.{digest}",
+            original_legs=plan.legs,
+            closing_legs=closing,
+            quantity=plan.quantity,
+            limit_credit=decision.limit_credit,
+            created_at=now,
+        )
+
+
 class JsonlExitPlanStore:
     """Append-only plan journal; latest record per plan ID is authoritative on reload."""
 
@@ -118,7 +149,7 @@ class JsonlExitPlanStore:
 
 
 def _decode_plan(payload: dict) -> ExitPlan:
-    from agent_contracts import LegSide, OptionLeg, OptionRight
+    from agent_contracts import OptionRight
 
     legs = tuple(
         OptionLeg(

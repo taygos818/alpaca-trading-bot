@@ -14,6 +14,7 @@ sys.path.insert(0, str(ENGINE))
 
 from agent_contracts import (  # noqa: E402
     AuthorizedExecution,
+    AuthorizedExit,
     ContractValidationError,
     Direction,
     ExecutionAction,
@@ -119,6 +120,32 @@ def credentials():
     return PaperCredentials("paper-key-value", "paper-secret-value")
 
 
+def authorized_exit(multi_leg=True):
+    entry = authorized_execution(multi_leg=multi_leg)
+    closing = tuple(
+        OptionLeg(
+            leg.option_symbol,
+            LegSide.SELL if leg.side is LegSide.BUY else LegSide.BUY,
+            leg.right,
+            leg.quantity,
+            leg.strike,
+            leg.expiration,
+        )
+        for leg in entry.proposal.legs
+    )
+    return AuthorizedExit(
+        record_id="exit-command.001",
+        trace_id="trace.exit.001",
+        exit_plan_id="exit-plan.001",
+        client_order_id="agent-exit.001",
+        original_legs=entry.proposal.legs,
+        closing_legs=closing,
+        quantity=1,
+        limit_credit=Decimal("1.50"),
+        created_at=NOW,
+    )
+
+
 def test_preview_builds_structured_multileg_cli_without_shell():
     runner = RecordingRunner(stdout='{"dry_run":true}')
     gateway = AlpacaCliGateway(credentials, runner=runner)
@@ -178,13 +205,16 @@ def test_gateway_exposes_only_allowlisted_operations_and_rejects_custom_binary()
     public_methods = {name for name in dir(AlpacaCliGateway) if not name.startswith("_")}
     assert public_methods == {
         "account",
+        "cancel_order",
         "clock",
         "open_orders",
         "order_by_client_id",
         "policy",
         "positions",
         "preview",
+        "preview_exit",
         "submit",
+        "submit_exit",
         "verify_version",
     }
     with pytest.raises(AlpacaCliError, match="CLI binary"):
@@ -199,6 +229,48 @@ def test_cli_error_redacts_unstructured_stderr_and_credentials_repr():
     assert "paper-secret-value" not in str(error.value)
     assert "paper-key-value" not in repr(credentials())
     assert "paper-secret-value" not in repr(credentials())
+
+
+def test_single_order_cancel_is_explicitly_gated_and_never_bulk():
+    runner = RecordingRunner(stdout='{"status":"accepted"}')
+    shadow = AlpacaCliGateway(credentials, runner=runner)
+    with pytest.raises(SubmissionDisabled, match="shadow mode"):
+        shadow.cancel_order("paper-order.001")
+    assert runner.calls == []
+
+    enabled = AlpacaCliGateway(
+        credentials,
+        policy=GatewayPolicy(shadow_mode=False, submission_enabled=True),
+        runner=runner,
+    )
+    response = enabled.cancel_order("paper-order.001")
+    args, _ = runner.calls[-1]
+    assert args[1:4] == ("order", "cancel", "--order-id")
+    assert "cancel-all" not in args
+    assert response.operation == "order.cancel"
+
+
+def test_exit_preview_exactly_reverses_position_intents_and_submission_is_gated():
+    runner = RecordingRunner(stdout='{"dry_run":true}')
+    shadow = AlpacaCliGateway(credentials, runner=runner)
+    shadow.preview_exit(authorized_exit())
+    args, _ = runner.calls[-1]
+    legs = json.loads(args[args.index("--legs") + 1])
+    assert [(leg["side"], leg["position_intent"]) for leg in legs] == [
+        ("sell", "sell_to_close"),
+        ("buy", "buy_to_close"),
+    ]
+    with pytest.raises(SubmissionDisabled, match="shadow mode"):
+        shadow.submit_exit(authorized_exit())
+
+    enabled = AlpacaCliGateway(
+        credentials,
+        policy=GatewayPolicy(shadow_mode=False, submission_enabled=True),
+        runner=runner,
+    )
+    enabled.submit_exit(authorized_exit(multi_leg=False))
+    args, _ = runner.calls[-1]
+    assert args[args.index("--position-intent") + 1] == "sell_to_close"
 
 
 def test_cli_version_and_docker_build_are_pinned_to_verified_revision():

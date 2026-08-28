@@ -25,6 +25,7 @@ from defined_risk_options import (  # noqa: E402
     DefinedRiskOptionsStrategy,
     DiscoveryCandidate,
     DynamicOptionsProposalBuilder,
+    ExitCommandFactory,
     ExitDecisionEngine,
     ExitPlanFactory,
     ExitPlanState,
@@ -419,7 +420,12 @@ def test_exit_plan_persists_and_profit_loss_time_expiration_thesis_rules(tmp_pat
     )
     assert plan.maximum_loss == Decimal("480.00")
     engine = ExitDecisionEngine()
-    assert engine.assess(plan, current_mark=Decimal("3.60"), now=NOW, thesis_valid=True).reasons == ("profit_target",)
+    profit = engine.assess(plan, current_mark=Decimal("3.60"), now=NOW, thesis_valid=True)
+    assert profit.reasons == ("profit_target",)
+    close = ExitCommandFactory().for_due_plan(plan, profit, NOW)
+    assert close.quantity == 2
+    assert [leg.side.value for leg in close.closing_legs] == ["sell", "buy"]
+    assert close.limit_credit == Decimal("3.60")
     assert engine.assess(plan, current_mark=Decimal("1.40"), now=NOW, thesis_valid=True).reasons == ("loss_limit",)
     assert "holding_time" in engine.assess(
         plan, current_mark=Decimal("2.40"), now=NOW + timedelta(days=3), thesis_valid=True

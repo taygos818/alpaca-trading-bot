@@ -13,7 +13,7 @@ import json
 import subprocess
 from typing import Any, Callable
 
-from agent_contracts import AuthorizedExecution, ExecutionAction, ExecutionCommand, LegSide, OptionRight
+from agent_contracts import AuthorizedExecution, AuthorizedExit, ExecutionAction, ExecutionCommand, LegSide, OptionRight
 
 
 ALPACA_CLI_VERSION = "0.0.14"
@@ -114,6 +114,25 @@ class AlpacaCliGateway:
             ("order", "get-by-client-id", "--client-order-id", client_order_id, "--quiet"),
         )
 
+    def cancel_order(self, broker_order_id: str) -> CliResponse:
+        """Cancel one explicitly identified paper order; bulk cancellation is forbidden."""
+        if self._policy.shadow_mode:
+            raise SubmissionDisabled("shadow mode cannot cancel orders")
+        if not self._policy.submission_enabled:
+            raise SubmissionDisabled("paper order submission is disabled")
+        self._require_identifier("broker_order_id", broker_order_id)
+        completed = self._invoke(
+            ("order", "cancel", "--order-id", broker_order_id, "--quiet"),
+            api_command=True,
+        )
+        payload = {"accepted": True}
+        if completed.stdout.strip():
+            try:
+                payload = json.loads(completed.stdout)
+            except json.JSONDecodeError as exc:
+                raise AlpacaCliError("order.cancel returned invalid JSON") from exc
+        return CliResponse(operation="order.cancel", payload=payload, exit_code=completed.returncode)
+
     def preview(self, execution: AuthorizedExecution) -> CliResponse:
         command = self._validated_command(execution)
         args = (*self._order_args(command), "--dry-run", "--quiet")
@@ -126,6 +145,16 @@ class AlpacaCliGateway:
             raise SubmissionDisabled("paper order submission is disabled")
         command = self._validated_command(execution)
         return self._json_call("order.submit", (*self._order_args(command), "--quiet"))
+
+    def preview_exit(self, execution: AuthorizedExit) -> CliResponse:
+        return self._json_call("order.exit_preview", (*self._exit_order_args(execution), "--dry-run", "--quiet"))
+
+    def submit_exit(self, execution: AuthorizedExit) -> CliResponse:
+        if self._policy.shadow_mode:
+            raise SubmissionDisabled("shadow mode cannot submit exit orders")
+        if not self._policy.submission_enabled:
+            raise SubmissionDisabled("paper order submission is disabled")
+        return self._json_call("order.exit_submit", (*self._exit_order_args(execution), "--quiet"))
 
     @staticmethod
     def _validated_command(execution: AuthorizedExecution) -> ExecutionCommand:
@@ -184,6 +213,33 @@ class AlpacaCliGateway:
             "--legs",
             json.dumps(legs, sort_keys=True, separators=(",", ":")),
         )
+
+    def _exit_order_args(self, execution: AuthorizedExit) -> tuple[str, ...]:
+        if not isinstance(execution, AuthorizedExit):
+            raise AlpacaCliError("exit gateway requires an AuthorizedExit envelope")
+        common = (
+            "order", "submit", "--qty", str(execution.quantity), "--type", "limit",
+            "--limit-price", format(execution.limit_credit, "f"), "--time-in-force", "day",
+            "--client-order-id", execution.client_order_id,
+        )
+        if len(execution.closing_legs) == 1:
+            leg = execution.closing_legs[0]
+            return (
+                *common,
+                "--symbol", leg.option_symbol,
+                "--side", leg.side.value,
+                "--position-intent", "sell_to_close" if leg.side is LegSide.SELL else "buy_to_close",
+            )
+        legs = [
+            {
+                "symbol": leg.option_symbol,
+                "ratio_qty": str(leg.quantity),
+                "side": leg.side.value,
+                "position_intent": "sell_to_close" if leg.side is LegSide.SELL else "buy_to_close",
+            }
+            for leg in execution.closing_legs
+        ]
+        return (*common, "--order-class", "mleg", "--legs", json.dumps(legs, sort_keys=True, separators=(",", ":")))
 
     @staticmethod
     def _validate_defined_risk_shape(command: ExecutionCommand) -> None:

@@ -14,7 +14,7 @@ An autonomous, multi-agent options trading system for the 2026 Alpaca AI Trading
 
 The planned primary strategy uses catalyst-confirmed directional call and put debit spreads. A Level 2 paper account may use defined-risk long calls and puts until Level 3 spreads are available. The opportunity universe is dynamic and filtered for options eligibility and liquidity.
 
-See [Contest Architecture](docs/CONTEST_ARCHITECTURE.md), [Decision Contracts](docs/DECISION_CONTRACTS.md), [Multi-Agent Coordinator](docs/MULTI_AGENT_COORDINATOR.md), [Milestones](docs/MILESTONES.md), [Data Provider Plan](docs/DATA_PROVIDER_PLAN.md), [External Data Provenance](docs/EXTERNAL_DATA_PROVENANCE.md), [Featherless Autonomous Analysis](docs/FEATHERLESS_ANALYSIS.md), and [Defined-Risk Options Strategy](docs/DEFINED_RISK_OPTIONS.md).
+See [Contest Architecture](docs/CONTEST_ARCHITECTURE.md), [Decision Contracts](docs/DECISION_CONTRACTS.md), [Multi-Agent Coordinator](docs/MULTI_AGENT_COORDINATOR.md), [Milestones](docs/MILESTONES.md), [Data Provider Plan](docs/DATA_PROVIDER_PLAN.md), [External Data Provenance](docs/EXTERNAL_DATA_PROVENANCE.md), [Featherless Autonomous Analysis](docs/FEATHERLESS_ANALYSIS.md), [Defined-Risk Options Strategy](docs/DEFINED_RISK_OPTIONS.md), and [Replay and Bounded Paper Launch](docs/PAPER_LAUNCH.md).
 
 ## Bootstrap
 

@@ -1,6 +1,6 @@
 """Milestone 5 deterministic defined-risk options strategy."""
 
-from .exits import ExitDecisionEngine, ExitPlanFactory, JsonlExitPlanStore
+from .exits import ExitCommandFactory, ExitDecisionEngine, ExitPlanFactory, JsonlExitPlanStore
 from .integration import DynamicOptionsProposalBuilder
 from .models import (
     DefinedRiskOptionsConfig,
@@ -23,6 +23,7 @@ __all__ = [
     "DynamicOptionsProposalBuilder",
     "ExitDecision",
     "ExitDecisionEngine",
+    "ExitCommandFactory",
     "ExitPlan",
     "ExitPlanFactory",
     "ExitPlanState",

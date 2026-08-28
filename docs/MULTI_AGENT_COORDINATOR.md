@@ -54,6 +54,6 @@ The adapter:
 
 ## Current safety state
 
-Milestones 2 through 4 do not start a service or submit a paper order. External data and Featherless analysis now terminate at typed analyses and shadow proposal gates. The contest options strategy, persistence, broker reconciliation, and bounded paper submission belong to later milestones.
+Milestone 6 adds a separate promotion layer after shadow proposal review. It performs broker-side client-order-ID deduplication, dry-run preview, explicitly bounded paper submission, partial-fill reconciliation, complete trace journaling, and persisted exit ownership. The coordinator itself remains credential-free and cannot submit.
 
-Rollback is immediate: leave `AGENT_COORDINATOR_ENABLED=false` and `PAPER_ORDER_SUBMISSION_ENABLED=false`, or revert the Milestone 2 commit. The legacy paper engine and the separate live `trading-bot-us` project are not activated or modified by this coordinator.
+Rollback is immediate: leave `AGENT_COORDINATOR_ENABLED=false`, `DEFINED_RISK_OPTIONS_ENABLED=false`, and `PAPER_ORDER_SUBMISSION_ENABLED=false`. Existing paper orders and positions remain under reconciliation and persisted exit plans. The separate live `trading-bot-us` project is not activated or modified by this coordinator.

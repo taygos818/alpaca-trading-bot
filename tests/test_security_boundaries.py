@@ -96,6 +96,19 @@ def test_defined_risk_options_is_default_off_and_cannot_execute():
     assert "execution_gateway" not in option_source
 
 
+def test_paper_promotion_has_no_credentials_and_submission_requires_three_gates():
+    runtime_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "services/strategy-engine/paper_runtime").glob("*.py")
+    )
+    assert "ALPACA_API_KEY" not in runtime_source
+    assert "ALPACA_SECRET_KEY" not in runtime_source
+    assert "subprocess" not in runtime_source
+    assert "PAPER_ORDER_SUBMISSION_ENABLED" in runtime_source
+    assert "PAPER_ORDER_DRY_RUN" in runtime_source
+    assert "M6_BOUNDED_SUBMISSION_ACK" in runtime_source
+
+
 def test_default_test_run_cannot_load_local_secret_file():
     source = (ROOT / "tests/test_integration_feeds.py").read_text(encoding="utf-8")
     assert ".env.secrets" not in source

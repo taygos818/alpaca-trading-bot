@@ -174,6 +174,9 @@ class DataFeedSettings:
     alpaca_data_api_url: str = "https://data.alpaca.markets"
     alpaca_trading_api_url: str = "https://paper-api.alpaca.markets"
     alpaca_data_feed: str = "iex"
+    options_market_data_feed: str = "indicative"
+    options_min_dte: int = 7
+    options_max_dte: int = 21
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
     fred_api_url: str = "https://api.stlouisfed.org/fred"
@@ -198,6 +201,9 @@ class DataFeedSettings:
             alpaca_data_api_url=os.getenv("ALPACA_DATA_API_URL", "https://data.alpaca.markets").rstrip("/"),
             alpaca_trading_api_url=trading_api_url,
             alpaca_data_feed=os.getenv("ALPACA_DATA_FEED", "iex"),
+            options_market_data_feed=os.getenv("OPTIONS_MARKET_DATA_FEED", "indicative"),
+            options_min_dte=int(os.getenv("OPTIONS_MIN_DTE", "7")),
+            options_max_dte=int(os.getenv("OPTIONS_MAX_DTE", "21")),
             alpaca_api_key=api_key,
             alpaca_secret_key=secret_key,
             fred_api_url=os.getenv("FRED_API_URL", "https://api.stlouisfed.org/fred").rstrip("/"),
@@ -367,6 +373,9 @@ class AlpacaMarketDataProvider:
         timeout_seconds: float = 10.0,
         redis_url: str = "",
         cache_ttl_seconds: int = 60,
+        options_feed: str = "indicative",
+        options_min_dte: int = 7,
+        options_max_dte: int = 21,
     ):
         self.api_key = api_key
         self.secret_key = secret_key
@@ -377,6 +386,13 @@ class AlpacaMarketDataProvider:
         self.session = session or requests.Session()
         self.timeout_seconds = timeout_seconds
         self.cache_ttl_seconds = cache_ttl_seconds
+        if options_feed not in {"indicative", "opra"}:
+            raise ValueError("unsupported options market data feed")
+        if options_min_dte <= 0 or options_max_dte < options_min_dte:
+            raise ValueError("invalid options DTE window")
+        self.options_feed = options_feed
+        self.options_min_dte = options_min_dte
+        self.options_max_dte = options_max_dte
         self.observations: list[dict] = []
         
         self.redis_client = None
@@ -392,8 +408,8 @@ class AlpacaMarketDataProvider:
     def get_option_contracts(self, symbol: str) -> list[dict]:
         import datetime
         today = datetime.date.today()
-        gte_date = (today + datetime.timedelta(days=30)).strftime("%Y-%m-%d")
-        lte_date = (today + datetime.timedelta(days=45)).strftime("%Y-%m-%d")
+        gte_date = (today + datetime.timedelta(days=self.options_min_dte)).strftime("%Y-%m-%d")
+        lte_date = (today + datetime.timedelta(days=self.options_max_dte)).strftime("%Y-%m-%d")
         try:
             response = self.session.get(
                 f"{self.trading_api_url}/v2/options/contracts",
@@ -433,7 +449,7 @@ class AlpacaMarketDataProvider:
                     f"{self.base_url}/v1beta1/options/snapshots",
                     headers=self._headers(),
                     params={
-                        "feed": "indicative",
+                        "feed": self.options_feed,
                         "symbols": ",".join(chunk),
                     },
                     timeout=self.timeout_seconds,
@@ -892,6 +908,9 @@ def build_market_snapshot_provider() -> MarketSnapshotProvider:
         timeout_seconds=settings.request_timeout_seconds,
         redis_url=settings.redis_url,
         cache_ttl_seconds=settings.cache_ttl_seconds,
+        options_feed=settings.options_market_data_feed,
+        options_min_dte=settings.options_min_dte,
+        options_max_dte=settings.options_max_dte,
     )
     fred_provider = FredMarketDataProvider(
         api_key=settings.fred_api_key,

@@ -1,0 +1,210 @@
+"""Promotion of reviewed commands into a tightly bounded paper lifecycle."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal
+import os
+from typing import Any
+
+from agent_contracts import AuthorizedExecution, OrderEvent, OrderStatus
+from execution_gateway import AlpacaCliError, AlpacaCliGateway, CliResponse
+
+
+class BrokerStateUnresolved(RuntimeError):
+    pass
+
+
+FINAL_STATUSES = {"filled", "canceled", "cancelled", "expired", "rejected"}
+OPEN_STATUSES = {"new", "accepted", "pending_new", "partially_filled", "pending_cancel", "pending_replace"}
+
+
+@dataclass(frozen=True, slots=True)
+class PaperLaunchPolicy:
+    submission_enabled: bool = False
+    dry_run: bool = True
+    bounded_ack: str = ""
+    max_submissions_per_process: int = 1
+    max_authorized_loss_usd: Decimal = Decimal("150")
+    max_open_orders: int = 4
+
+    def __post_init__(self) -> None:
+        if self.submission_enabled and self.dry_run:
+            raise ValueError("paper submission and dry-run cannot both be enabled")
+        if self.submission_enabled and self.bounded_ack != "paper-contest":
+            raise ValueError("bounded paper acknowledgement is required")
+        if self.max_submissions_per_process <= 0 or self.max_open_orders < 0:
+            raise ValueError("invalid paper launch count limit")
+        if self.max_authorized_loss_usd <= 0:
+            raise ValueError("paper launch risk limit must be positive")
+
+    @classmethod
+    def from_env(cls) -> "PaperLaunchPolicy":
+        enabled = _flag("PAPER_ORDER_SUBMISSION_ENABLED", False)
+        return cls(
+            submission_enabled=enabled,
+            dry_run=_flag("PAPER_ORDER_DRY_RUN", True),
+            bounded_ack=os.getenv("M6_BOUNDED_SUBMISSION_ACK", "").strip(),
+            max_submissions_per_process=int(os.getenv("M6_MAX_SUBMISSIONS_PER_PROCESS", "1")),
+            max_authorized_loss_usd=Decimal(os.getenv("M6_MAX_AUTHORIZED_LOSS_USD", "150")),
+            max_open_orders=int(os.getenv("M6_MAX_OPEN_ORDERS", "4")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerOrderSnapshot:
+    broker_order_id: str
+    client_order_id: str
+    status: str
+    filled_quantity: int
+    average_fill_price: Decimal
+    broker_timestamp: datetime
+
+    @property
+    def is_final(self) -> bool:
+        return self.status in FINAL_STATUSES
+
+
+@dataclass(frozen=True, slots=True)
+class LaunchResult:
+    mode: str
+    response: CliResponse | None
+    snapshot: BrokerOrderSnapshot | None
+    duplicate: bool = False
+
+
+class BoundedPaperLauncher:
+    """One-process submission fuse with mandatory duplicate and broker-state checks."""
+
+    def __init__(self, gateway: AlpacaCliGateway, policy: PaperLaunchPolicy | None = None) -> None:
+        self.gateway = gateway
+        self.policy = policy or PaperLaunchPolicy.from_env()
+        self._submissions = 0
+
+    def launch(self, execution: AuthorizedExecution) -> LaunchResult:
+        existing = self._lookup_existing(execution.command.client_order_id)
+        if existing is not None:
+            return LaunchResult("duplicate", None, existing, True)
+        open_orders = _orders(self.gateway.open_orders().payload)
+        duplicate = next(
+            (item for item in open_orders if item.client_order_id == execution.command.client_order_id),
+            None,
+        )
+        if duplicate is not None:
+            return LaunchResult("duplicate", None, duplicate, True)
+        if len([item for item in open_orders if not item.is_final]) >= self.policy.max_open_orders:
+            raise BrokerStateUnresolved("maximum open-order count reached")
+
+        preview = self.gateway.preview(execution)
+        if not self.policy.submission_enabled:
+            return LaunchResult("dry_run", preview, None)
+        if self._submissions >= self.policy.max_submissions_per_process:
+            raise BrokerStateUnresolved("bounded submission count reached")
+        if execution.authorization.authorized_maximum_loss > self.policy.max_authorized_loss_usd:
+            raise BrokerStateUnresolved("authorization exceeds bounded paper loss limit")
+
+        response = self.gateway.submit(execution)
+        self._submissions += 1
+        snapshot = normalize_broker_order(response.payload)
+        if snapshot.client_order_id != execution.command.client_order_id:
+            raise BrokerStateUnresolved("broker response client order ID mismatch")
+        return LaunchResult("submitted", response, snapshot)
+
+    def _lookup_existing(self, client_order_id: str) -> BrokerOrderSnapshot | None:
+        try:
+            response = self.gateway.order_by_client_id(client_order_id)
+        except AlpacaCliError as exc:
+            if "status=404" in str(exc):
+                return None
+            raise BrokerStateUnresolved("client-order-id lookup failed closed") from exc
+        snapshot = normalize_broker_order(response.payload)
+        if snapshot.client_order_id != client_order_id:
+            raise BrokerStateUnresolved("client-order-id lookup returned a different order")
+        return snapshot
+
+    def reconcile(self, execution: AuthorizedExecution) -> tuple[BrokerOrderSnapshot, OrderEvent]:
+        response = self.gateway.order_by_client_id(execution.command.client_order_id)
+        snapshot = normalize_broker_order(response.payload)
+        if snapshot.client_order_id != execution.command.client_order_id:
+            raise BrokerStateUnresolved("reconciliation returned a different client order ID")
+        status = _contract_status(snapshot.status)
+        event = OrderEvent(
+            record_id=f"event.{execution.command.record_id}.{snapshot.status}.{snapshot.filled_quantity}",
+            trace_id=execution.command.trace_id,
+            command_id=execution.command.record_id,
+            broker_order_id=snapshot.broker_order_id,
+            status=status,
+            filled_quantity=snapshot.filled_quantity,
+            average_fill_price=snapshot.average_fill_price,
+            broker_timestamp=snapshot.broker_timestamp,
+            created_at=max(snapshot.broker_timestamp, execution.command.created_at),
+        )
+        return snapshot, event
+
+    def cancel(self, execution: AuthorizedExecution, snapshot: BrokerOrderSnapshot) -> CliResponse:
+        if snapshot.client_order_id != execution.command.client_order_id:
+            raise BrokerStateUnresolved("refusing to cancel an unrelated order")
+        if snapshot.is_final:
+            raise BrokerStateUnresolved("final order cannot be canceled")
+        return self.gateway.cancel_order(snapshot.broker_order_id)
+
+
+def normalize_broker_order(payload: Any) -> BrokerOrderSnapshot:
+    if isinstance(payload, dict) and isinstance(payload.get("order"), dict):
+        payload = payload["order"]
+    if not isinstance(payload, dict):
+        raise BrokerStateUnresolved("broker order payload is invalid")
+    order_id = str(payload.get("id") or payload.get("order_id") or "").strip()
+    client_id = str(payload.get("client_order_id") or "").strip()
+    status = str(payload.get("status") or "").strip().lower()
+    if not order_id or not client_id or status not in FINAL_STATUSES | OPEN_STATUSES:
+        raise BrokerStateUnresolved("broker order identity or status is unresolved")
+    filled = int(Decimal(str(payload.get("filled_qty") or payload.get("filled_quantity") or "0")))
+    average = Decimal(str(payload.get("filled_avg_price") or payload.get("average_fill_price") or "0"))
+    if filled == 0:
+        average = Decimal("0")
+    timestamp_value = payload.get("updated_at") or payload.get("filled_at") or payload.get("created_at")
+    if not timestamp_value:
+        raise BrokerStateUnresolved("broker order timestamp is missing")
+    timestamp = datetime.fromisoformat(str(timestamp_value).replace("Z", "+00:00")).astimezone(timezone.utc)
+    return BrokerOrderSnapshot(order_id, client_id, status, filled, average, timestamp)
+
+
+def _orders(payload: Any) -> tuple[BrokerOrderSnapshot, ...]:
+    if isinstance(payload, dict):
+        if "orders" in payload:
+            payload = payload["orders"]
+        elif "data" in payload:
+            payload = payload["data"]
+        else:
+            raise BrokerStateUnresolved("open-order payload is invalid")
+    if payload in (None, ""):
+        return ()
+    if not isinstance(payload, list):
+        raise BrokerStateUnresolved("open-order payload is invalid")
+    return tuple(normalize_broker_order(item) for item in payload)
+
+
+def _contract_status(status: str) -> OrderStatus:
+    mapping = {
+        "new": OrderStatus.ACCEPTED,
+        "accepted": OrderStatus.ACCEPTED,
+        "pending_new": OrderStatus.REQUESTED,
+        "partially_filled": OrderStatus.PARTIALLY_FILLED,
+        "filled": OrderStatus.FILLED,
+        "canceled": OrderStatus.CANCELED,
+        "cancelled": OrderStatus.CANCELED,
+        "expired": OrderStatus.CANCELED,
+        "rejected": OrderStatus.REJECTED,
+        "pending_cancel": OrderStatus.ACCEPTED,
+        "pending_replace": OrderStatus.ACCEPTED,
+    }
+    return mapping[status]
+
+
+def _flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
