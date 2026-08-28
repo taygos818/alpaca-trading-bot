@@ -18,6 +18,7 @@ def test_compose_is_isolated_and_paper_only():
     assert "ALPACA_LIVE_" not in compose
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in compose
     assert "AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}" in compose
+    assert "AGENT_COORDINATOR_SHADOW_MODE: ${AGENT_COORDINATOR_SHADOW_MODE:-true}" in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
     assert "alpaca_agent_postgres_data" in compose
     assert "alpaca_agent_redis_data" in compose
@@ -41,6 +42,19 @@ def test_obsolete_ai_modules_and_live_artifacts_are_absent():
     assert not (ROOT / "scripts/live_canary_activation.py").exists()
     assert not (ROOT / "scripts/live_liquidation_monitor.py").exists()
     assert not (ROOT / "LIVE_SETUP.md").exists()
+
+
+def test_agent_coordinator_is_credential_free_and_cli_gateway_is_narrow():
+    agent_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "services/strategy-engine/multi_agent").glob("*.py")
+    )
+    gateway_source = (ROOT / "services/strategy-engine/execution_gateway/alpaca_cli.py").read_text(encoding="utf-8")
+    assert "ALPACA_API_KEY" not in agent_source
+    assert "ALPACA_SECRET_KEY" not in agent_source
+    assert "subprocess" not in agent_source
+    assert "shell=False" in gateway_source
+    assert 'forbidden = {"api", "close-all", "cancel-all", "locate"}' in gateway_source
 
 
 def test_default_test_run_cannot_load_local_secret_file():

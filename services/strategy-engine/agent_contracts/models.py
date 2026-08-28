@@ -413,6 +413,49 @@ class ExecutionCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthorizedExecution:
+    """Self-validating envelope accepted by the credentialed gateway."""
+
+    proposal: OptionsProposal
+    authorization: RiskAuthorization
+    command: ExecutionCommand
+
+    def __post_init__(self) -> None:
+        if len({self.proposal.trace_id, self.authorization.trace_id, self.command.trace_id}) != 1:
+            raise ContractValidationError("authorized execution trace_id mismatch")
+        if self.authorization.proposal_id != self.proposal.record_id:
+            raise ContractValidationError("authorization does not reference the proposal")
+        if self.authorization.proposal_fingerprint != contract_fingerprint(self.proposal):
+            raise ContractValidationError("authorization proposal fingerprint mismatch")
+        if self.authorization.decision is RiskDecision.REJECT:
+            raise ContractValidationError("rejected authorization cannot reach execution")
+        if self.authorization.authorized_quantity > self.proposal.contract_quantity:
+            raise ContractValidationError("authorization exceeds proposal quantity")
+        if self.authorization.authorized_maximum_loss > self.proposal.maximum_loss:
+            raise ContractValidationError("authorization exceeds proposal maximum loss")
+        if self.command.authorization_id != self.authorization.record_id:
+            raise ContractValidationError("command does not reference the authorization")
+        if self.command.authorization_fingerprint != contract_fingerprint(self.authorization):
+            raise ContractValidationError("command authorization fingerprint mismatch")
+        if self.command.proposal_id != self.proposal.record_id:
+            raise ContractValidationError("command does not reference the proposal")
+        if not self.authorization.created_at <= self.command.created_at < self.authorization.expires_at:
+            raise ContractValidationError("command falls outside the authorization window")
+        if self.command.quantity > self.authorization.authorized_quantity:
+            raise ContractValidationError("command exceeds authorized quantity")
+        if self.command.legs != self.proposal.legs:
+            raise ContractValidationError("command legs do not match proposal")
+        if self.command.limit_price > self.proposal.limit_debit:
+            raise ContractValidationError("command exceeds proposal limit debit")
+        minimum_proposal_loss = self.proposal.limit_debit * Decimal("100") * self.proposal.contract_quantity
+        if self.proposal.maximum_loss < minimum_proposal_loss:
+            raise ContractValidationError("proposal understates premium at risk")
+        minimum_authorized_loss = self.command.limit_price * Decimal("100") * self.command.quantity
+        if self.authorization.authorized_maximum_loss < minimum_authorized_loss:
+            raise ContractValidationError("authorization understates premium at risk")
+
+
+@dataclass(frozen=True, slots=True)
 class OrderEvent:
     record_id: str
     trace_id: str
