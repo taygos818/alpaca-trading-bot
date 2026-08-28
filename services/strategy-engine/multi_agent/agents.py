@@ -11,6 +11,7 @@ import hashlib
 from typing import Callable
 
 from agent_contracts import (
+    AnalysisDisposition,
     AdversarialObjection,
     AgentAnalysis,
     ContractValidationError,
@@ -102,6 +103,7 @@ class EvidenceAnalysisAgent:
             thesis=draft.thesis,
             contradictions=draft.contradictions,
             created_at=now,
+            disposition=draft.disposition,
         )
 
 
@@ -137,6 +139,8 @@ class OptionsStructureAgent:
         analyses: tuple[AgentAnalysis, ...],
         now: datetime,
     ) -> tuple[OptionsProposal, ...]:
+        if any(item.disposition is AnalysisDisposition.ABSTAIN for item in analyses):
+            return ()
         analysis_ids = tuple(sorted(item.record_id for item in analyses))
         proposals = []
         for draft in self._builder(bundle, evidence, analyses):

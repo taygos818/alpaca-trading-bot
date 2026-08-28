@@ -35,6 +35,11 @@ class Direction(str, Enum):
     NEUTRAL = "neutral"
 
 
+class AnalysisDisposition(str, Enum):
+    ANALYZE = "analyze"
+    ABSTAIN = "abstain"
+
+
 class LegSide(str, Enum):
     BUY = "buy"
     SELL = "sell"
@@ -153,6 +158,8 @@ def _enum_value(value: Any) -> Any:
         return {field.name: _enum_value(getattr(value, field.name)) for field in fields(value)}
     if isinstance(value, tuple):
         return [_enum_value(item) for item in value]
+    if isinstance(value, list):
+        return [_enum_value(item) for item in value]
     if isinstance(value, dict):
         return {str(key): _enum_value(item) for key, item in value.items()}
     if isinstance(value, float) and not math.isfinite(value):
@@ -256,6 +263,7 @@ class AgentAnalysis:
     thesis: str
     contradictions: tuple[str, ...]
     created_at: datetime
+    disposition: AnalysisDisposition = AnalysisDisposition.ANALYZE
     schema_version: str = CONTRACT_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -266,11 +274,15 @@ class AgentAnalysis:
             raise ContractValidationError("evidence_fingerprint must be a lowercase SHA-256 digest")
         _validate_ids("cited_evidence_ids", self.cited_evidence_ids)
         _require_enum("direction", self.direction, Direction)
+        _require_enum("disposition", self.disposition, AnalysisDisposition)
         _require_decimal("confidence", self.confidence)
         if self.confidence > Decimal("1"):
             raise ContractValidationError("confidence must be no greater than 1")
         _require_text("thesis", self.thesis)
         _require_tuple("contradictions", self.contradictions)
+        if self.disposition is AnalysisDisposition.ABSTAIN:
+            if self.direction is not Direction.NEUTRAL or self.confidence != Decimal("0"):
+                raise ContractValidationError("abstention must be neutral with zero confidence")
 
 
 @dataclass(frozen=True, slots=True)
@@ -595,8 +607,10 @@ class DecisionTrace:
 
         proposal_by_id = {item.record_id: item for item in self.proposals}
         for item in self.proposals:
-            if item.evidence_bundle_id != self.bundle.record_id or not set(item.analysis_ids).issubset(analysis_by_id):
+            if item.evidence_bundle_id != self.bundle.record_id or set(item.analysis_ids) != set(analysis_by_id):
                 raise ContractValidationError("proposal has an untraceable analysis or evidence reference")
+            if any(analysis_by_id[analysis_id].disposition is AnalysisDisposition.ABSTAIN for analysis_id in item.analysis_ids):
+                raise ContractValidationError("proposal cannot cross an analysis abstention")
             if item.created_at < max(analysis_by_id[analysis_id].created_at for analysis_id in item.analysis_ids):
                 raise ContractValidationError("proposal predates one of its analyses")
 

@@ -11,6 +11,7 @@ ENGINE = Path(__file__).resolve().parents[1] / "services" / "strategy-engine"
 sys.path.insert(0, str(ENGINE))
 
 from agent_contracts import (  # noqa: E402
+    AnalysisDisposition,
     AdversarialObjection,
     AgentAnalysis,
     ContractValidationError,
@@ -217,6 +218,18 @@ def test_contracts_are_immutable_and_canonical():
 
 def test_replay_fingerprint_is_deterministic_across_agent_completion_order():
     assert build_trace().replay_fingerprint == build_trace(reverse_independent_records=True).replay_fingerprint
+
+
+def test_decision_trace_rejects_proposal_crossing_analysis_abstention():
+    trace = build_trace()
+    abstaining = replace(
+        trace.analyses[0],
+        direction=Direction.NEUTRAL,
+        confidence=Decimal("0"),
+        disposition=AnalysisDisposition.ABSTAIN,
+    )
+    with pytest.raises(ContractValidationError, match="analysis abstention"):
+        replace(trace, analyses=(abstaining, trace.analyses[1]))
 
 
 def test_untraceable_or_tampered_output_fails_closed():

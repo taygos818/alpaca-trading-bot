@@ -22,6 +22,7 @@ def test_compose_is_isolated_and_paper_only():
     assert "FINNHUB_ENABLED: ${FINNHUB_ENABLED:-false}" in compose
     assert "YFINANCE_ENABLED: ${YFINANCE_ENABLED:-false}" in compose
     assert "FRED_ENABLED: ${FRED_ENABLED:-false}" in compose
+    assert "FEATHERLESS_ANALYSIS_ENABLED: ${FEATHERLESS_ANALYSIS_ENABLED:-false}" in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
     assert "alpaca_agent_postgres_data" in compose
     assert "alpaca_agent_redis_data" in compose
@@ -61,6 +62,22 @@ def test_agent_coordinator_is_credential_free_and_cli_gateway_is_narrow():
     assert "finnhub" not in gateway_source.lower()
     assert "yfinance" not in gateway_source.lower()
     assert "fred" not in gateway_source.lower()
+    assert "featherless" not in gateway_source.lower()
+
+
+def test_featherless_secret_is_confined_to_narrow_provider_adapter():
+    coordinator_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "services/strategy-engine/multi_agent").glob("*.py")
+    )
+    ai_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "services/strategy-engine/ai_analysis").glob("*.py")
+    )
+    assert "FEATHERLESS_API_KEY" not in coordinator_source
+    assert "ALPACA_API_KEY" not in ai_source
+    assert "ALPACA_SECRET_KEY" not in ai_source
+    assert "execution_gateway" not in ai_source
 
 
 def test_default_test_run_cannot_load_local_secret_file():

@@ -1,6 +1,6 @@
 # Multi-Agent Coordinator
 
-Milestone 2 adds a credential-free, shadow-only coordinator and a separate paper-only Alpaca CLI gateway. The coordinator is disabled unless `AGENT_COORDINATOR_ENABLED=true`; even when enabled, its policy cannot leave shadow mode in this milestone.
+Milestone 2 added a credential-free, shadow-only coordinator and a separate paper-only Alpaca CLI gateway. Milestone 4 can supply independently executed Featherless evaluators to the technical, catalyst, and macro analysis ports. The coordinator is disabled unless `AGENT_COORDINATOR_ENABLED=true`; its policy remains shadow-only until the bounded paper-submission milestone.
 
 ## Runtime boundaries
 
@@ -54,6 +54,6 @@ The adapter:
 
 ## Current safety state
 
-Milestone 2 does not start a service or submit a paper order. External data adapters, Featherless analysis, the contest options strategy, persistence, broker reconciliation, and bounded paper submission belong to later milestones.
+Milestones 2 through 4 do not start a service or submit a paper order. External data and Featherless analysis now terminate at typed analyses and shadow proposal gates. The contest options strategy, persistence, broker reconciliation, and bounded paper submission belong to later milestones.
 
 Rollback is immediate: leave `AGENT_COORDINATOR_ENABLED=false` and `PAPER_ORDER_SUBMISSION_ENABLED=false`, or revert the Milestone 2 commit. The legacy paper engine and the separate live `trading-bot-us` project are not activated or modified by this coordinator.

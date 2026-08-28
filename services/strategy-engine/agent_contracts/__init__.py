@@ -2,6 +2,7 @@
 
 from .models import (
     CONTRACT_SCHEMA_VERSION,
+    AnalysisDisposition,
     AdversarialObjection,
     AgentAnalysis,
     AuthorizedExecution,
@@ -30,6 +31,7 @@ from .models import (
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
+    "AnalysisDisposition",
     "AdversarialObjection",
     "AgentAnalysis",
     "AuthorizedExecution",

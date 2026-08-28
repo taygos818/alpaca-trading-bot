@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from agent_contracts import Direction, OptionLeg, PositionState, ProposalDecision
+from agent_contracts import AnalysisDisposition, Direction, OptionLeg, PositionState, ProposalDecision
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,7 @@ class AnalysisDraft:
     thesis: str
     cited_evidence_ids: tuple[str, ...]
     contradictions: tuple[str, ...] = ()
+    disposition: AnalysisDisposition = AnalysisDisposition.ANALYZE
 
 
 @dataclass(frozen=True, slots=True)
