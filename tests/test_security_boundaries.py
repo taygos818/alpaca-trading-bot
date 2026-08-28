@@ -82,6 +82,20 @@ def test_featherless_secret_is_confined_to_narrow_provider_adapter():
     assert "execution_gateway" not in ai_source
 
 
+def test_defined_risk_options_is_default_off_and_cannot_execute():
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    option_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "services/strategy-engine/defined_risk_options").glob("*.py")
+    )
+
+    assert "DEFINED_RISK_OPTIONS_ENABLED=false" in env_example
+    assert "ALPACA_API_KEY" not in option_source
+    assert "ALPACA_SECRET_KEY" not in option_source
+    assert "subprocess" not in option_source
+    assert "execution_gateway" not in option_source
+
+
 def test_default_test_run_cannot_load_local_secret_file():
     source = (ROOT / "tests/test_integration_feeds.py").read_text(encoding="utf-8")
     assert ".env.secrets" not in source

@@ -226,9 +226,8 @@ def test_gateway_rejects_command_without_authorization_envelope():
 
 
 def test_gateway_rejects_uncovered_single_leg_sell():
-    gateway = AlpacaCliGateway(credentials, runner=RecordingRunner())
-    with pytest.raises(AlpacaCliError, match="long-only"):
-        gateway.preview(authorized_execution(multi_leg=False, single_leg_side=LegSide.SELL))
+    with pytest.raises(ContractValidationError, match="long-only"):
+        authorized_execution(multi_leg=False, single_leg_side=LegSide.SELL)
 
 
 def test_authorized_envelope_rejects_risk_that_widens_proposal():
@@ -252,47 +251,20 @@ def test_authorized_envelope_rejects_risk_that_widens_proposal():
 
 def test_authorized_envelope_rejects_understated_option_premium_risk():
     execution = authorized_execution()
-    understated_proposal = OptionsProposal(
-        record_id="proposal.understated",
-        trace_id=execution.proposal.trace_id,
-        evidence_bundle_id=execution.proposal.evidence_bundle_id,
-        analysis_ids=execution.proposal.analysis_ids,
-        underlying=execution.proposal.underlying,
-        decision=execution.proposal.decision,
-        direction=execution.proposal.direction,
-        strategy_name=execution.proposal.strategy_name,
-        legs=execution.proposal.legs,
-        contract_quantity=1,
-        limit_debit=Decimal("1.25"),
-        maximum_loss=Decimal("100"),
-        rationale="Risk is intentionally understated for this test.",
-        created_at=NOW,
-    )
-    authorization = RiskAuthorization(
-        record_id="authorization.understated",
-        trace_id=understated_proposal.trace_id,
-        proposal_id=understated_proposal.record_id,
-        proposal_fingerprint=contract_fingerprint(understated_proposal),
-        objection_ids=(),
-        decision=RiskDecision.APPROVE,
-        authorized_quantity=1,
-        authorized_maximum_loss=Decimal("100"),
-        reason="Invalid understated premium risk.",
-        expires_at=execution.authorization.expires_at,
-        created_at=NOW,
-    )
-    command = ExecutionCommand(
-        record_id="command.understated",
-        trace_id=understated_proposal.trace_id,
-        authorization_id=authorization.record_id,
-        authorization_fingerprint=contract_fingerprint(authorization),
-        proposal_id=understated_proposal.record_id,
-        action=ExecutionAction.SUBMIT,
-        client_order_id="agent.understated",
-        legs=understated_proposal.legs,
-        quantity=1,
-        limit_price=Decimal("1.25"),
-        created_at=NOW,
-    )
     with pytest.raises(ContractValidationError, match="understates premium at risk"):
-        AuthorizedExecution(understated_proposal, authorization, command)
+        OptionsProposal(
+            record_id="proposal.understated",
+            trace_id=execution.proposal.trace_id,
+            evidence_bundle_id=execution.proposal.evidence_bundle_id,
+            analysis_ids=execution.proposal.analysis_ids,
+            underlying=execution.proposal.underlying,
+            decision=execution.proposal.decision,
+            direction=execution.proposal.direction,
+            strategy_name=execution.proposal.strategy_name,
+            legs=execution.proposal.legs,
+            contract_quantity=1,
+            limit_debit=Decimal("1.25"),
+            maximum_loss=Decimal("100"),
+            rationale="Risk is intentionally understated for this test.",
+            created_at=NOW,
+        )

@@ -301,6 +301,24 @@ def test_execution_command_requires_unexpired_authorization():
         replace(trace, commands=(late_command,))
 
 
+def test_proposal_contract_rejects_uncovered_or_wrong_direction_options():
+    trace = build_trace()
+    with pytest.raises(ContractValidationError, match="single-leg proposal must be long-only"):
+        replace(trace.proposals[0], legs=(trace.proposals[0].legs[1],))
+    wrong_geometry = (
+        trace.proposals[0].legs[1],
+        trace.proposals[0].legs[0],
+    )
+    with pytest.raises(ContractValidationError, match="defined-risk debit spread"):
+        replace(
+            trace.proposals[0],
+            legs=(replace(wrong_geometry[0], side=LegSide.BUY), replace(wrong_geometry[1], side=LegSide.SELL)),
+        )
+    put_leg = replace(trace.proposals[0].legs[0], right=OptionRight.PUT)
+    with pytest.raises(ContractValidationError, match="bullish proposal must use calls"):
+        replace(trace.proposals[0], legs=(put_leg,))
+
+
 def test_coordinator_contract_gate_defaults_off():
     assert coordinator_contracts_enabled({}) is False
     assert coordinator_contracts_enabled({"AGENT_COORDINATOR_ENABLED": "true"}) is True

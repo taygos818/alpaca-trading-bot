@@ -19,7 +19,7 @@ def load_strategy_config(path: str) -> dict:
 
     if not isinstance(config, dict):
         raise StrategyConfigError("Strategy configuration root must be a TOML table")
-    for section in ("risk", "swing", "intraday"):
+    for section in ("risk", "swing", "intraday", "defined_risk_options"):
         value = config.get(section, {})
         if not isinstance(value, dict):
             raise StrategyConfigError(f"Strategy configuration section [{section}] must be a table")

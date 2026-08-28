@@ -29,9 +29,9 @@ class TradingLanePolicy:
         if lane == "options_paper":
             return cls(
                 name="options_paper",
-                allowed_strategies=frozenset({"tier1_wheel"}),
+                allowed_strategies=frozenset({"tier1_wheel", "defined_risk_options"}),
                 allowed_actions=frozenset({"sell_to_open", "sell_to_close", "buy_to_open", "buy_to_close", "buy", "sell"}),
-                description="Guarded options-enabled paper lane centered on Tier 1 Wheel execution.",
+                description="Guarded paper lane for deterministic defined-risk options execution.",
             )
         if lane == "disabled":
             return cls(

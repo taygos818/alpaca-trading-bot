@@ -22,6 +22,29 @@ max_dte = 45
 roll_dte = 7
 profit_take_pct = 0.50
 
+[defined_risk_options]
+min_dte = 7
+max_dte = 21
+exit_before_expiration_days = 2
+required_feed = "indicative"
+max_quote_age_seconds = 15
+min_open_interest = 100
+min_volume = 10
+max_leg_spread_pct = 0.15
+target_long_delta = 0.55
+target_short_delta = 0.30
+min_reward_risk = 0.75
+max_contracts = 4
+max_trade_risk_pct = 0.01
+max_total_risk_pct = 0.10
+max_underlying_risk_pct = 0.03
+max_correlation_risk_pct = 0.05
+min_cash_buffer_pct = 0.20
+daily_loss_limit_pct = 0.03
+profit_target_pct = 0.50
+loss_limit_pct = 0.40
+max_holding_days = 3
+
 [swing]
 ema_fast = 9
 ema_slow = 21
@@ -50,5 +73,3 @@ max_concentration_pct = 0.15
 max_trade_risk_pct = 0.05
 daily_drawdown_limit_pct = 0.10
 max_concentration_pct = 0.40
-
-

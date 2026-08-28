@@ -27,6 +27,7 @@ class TradingLaneTests(unittest.TestCase):
     def test_options_paper_lane_allows_options_strategy(self):
         policy = self.policy_for("options_paper")
         self.assertTrue(policy.supports_strategy("tier1_wheel"))
+        self.assertTrue(policy.supports_strategy("defined_risk_options"))
         self.assertTrue(policy.supports_action("buy_to_open"))
         self.assertFalse(policy.supports_strategy("tier2_swing"))
 

@@ -260,13 +260,20 @@ def test_options_structure_agents_propose_concurrently():
 
 
 def test_allocator_rejects_opposing_direction_in_same_batch():
+    bearish = replace(
+        proposal_draft(key="bear"),
+        direction=Direction.BEARISH,
+        strategy_name="put_debit_spread",
+        legs=(
+            OptionLeg("AAPL260904P00235000", LegSide.BUY, OptionRight.PUT, 1, Decimal("235"), date(2026, 9, 4)),
+            OptionLeg("AAPL260904P00230000", LegSide.SELL, OptionRight.PUT, 1, Decimal("230"), date(2026, 9, 4)),
+        ),
+    )
     structures = (
         OptionsStructureAgent("bullish", lambda bundle, items, analyses: (proposal_draft(key="bull"),)),
         OptionsStructureAgent(
             "bearish",
-            lambda bundle, items, analyses: (
-                replace(proposal_draft(key="bear"), direction=Direction.BEARISH),
-            ),
+            lambda bundle, items, analyses: (bearish,),
         ),
     )
     coordinator, _ = make_coordinator(structure_agents=structures)
@@ -308,7 +315,7 @@ def test_same_stable_proposal_id_with_changed_content_fails_closed():
         environment={"AGENT_COORDINATOR_ENABLED": "true"},
     )
     changed_agents = (
-        OptionsStructureAgent("directional", lambda bundle, items, analyses: (proposal_draft(maximum_loss=Decimal("100")),)),
+        OptionsStructureAgent("directional", lambda bundle, items, analyses: (proposal_draft(maximum_loss=Decimal("150")),)),
     )
     changed, _ = make_coordinator(registry=registry, structure_agents=changed_agents)
     with pytest.raises(ContractValidationError, match="reused with different content"):

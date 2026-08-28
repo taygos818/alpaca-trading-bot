@@ -345,6 +345,35 @@ class OptionsProposal:
             raise ContractValidationError("contract_quantity must be a positive whole number")
         _require_decimal("limit_debit", self.limit_debit, positive=True)
         _require_decimal("maximum_loss", self.maximum_loss, positive=True)
+        if len(self.legs) not in {1, 2}:
+            raise ContractValidationError("proposal permits only a long option or two-leg debit spread")
+        if len(self.legs) == 1:
+            if self.legs[0].side is not LegSide.BUY:
+                raise ContractValidationError("single-leg proposal must be long-only")
+        else:
+            bought = [leg for leg in self.legs if leg.side is LegSide.BUY]
+            sold = [leg for leg in self.legs if leg.side is LegSide.SELL]
+            if len(bought) != 1 or len(sold) != 1:
+                raise ContractValidationError("debit spread requires one bought and one sold leg")
+            long_leg, short_leg = bought[0], sold[0]
+            if (
+                long_leg.right is not short_leg.right
+                or long_leg.expiration != short_leg.expiration
+                or long_leg.quantity != short_leg.quantity
+            ):
+                raise ContractValidationError("debit spread legs must share right, expiration, and ratio")
+            call_debit = long_leg.right is OptionRight.CALL and long_leg.strike < short_leg.strike
+            put_debit = long_leg.right is OptionRight.PUT and long_leg.strike > short_leg.strike
+            if not (call_debit or put_debit):
+                raise ContractValidationError("proposal legs do not form a defined-risk debit spread")
+        rights = {leg.right for leg in self.legs}
+        if self.direction is Direction.BULLISH and rights != {OptionRight.CALL}:
+            raise ContractValidationError("bullish proposal must use calls")
+        if self.direction is Direction.BEARISH and rights != {OptionRight.PUT}:
+            raise ContractValidationError("bearish proposal must use puts")
+        premium_at_risk = self.limit_debit * Decimal("100") * self.contract_quantity
+        if self.maximum_loss < premium_at_risk:
+            raise ContractValidationError("proposal maximum loss understates premium at risk")
 
 
 @dataclass(frozen=True, slots=True)
