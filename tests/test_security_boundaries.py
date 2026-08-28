@@ -17,6 +17,7 @@ def test_compose_is_isolated_and_paper_only():
     assert "TRADING_LANE: options_live" not in compose
     assert "ALPACA_LIVE_" not in compose
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in compose
+    assert "AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}" in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
     assert "alpaca_agent_postgres_data" in compose
     assert "alpaca_agent_redis_data" in compose

@@ -81,6 +81,7 @@ services:
       BOT_STRATEGY: tier1_wheel
       TRADING_LANE: options_paper
       ACTIVE_BROKER: alpaca
+      AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}
       ALPACA_PAPER_TRADE: "true"
       ALPACA_TRADING_API_URL: https://paper-api.alpaca.markets
       ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}
