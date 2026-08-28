@@ -17,6 +17,8 @@ Milestone 6 promotes a credential-free coordinator result through a narrow Alpac
 
 On 2026-08-28, the configured paper account was active at options Level 3 with zero positions and zero open orders. The market clock was closed until 2026-08-31 09:30 ET, so no strategy submission was appropriate. Read-only discovery returned 71 qualified candidates from 14,271 assets. One dynamically selected candidate returned 192 option contracts, 192 snapshots, and 69 normalized contracts across the configured 7–21 DTE indicative feed. A quantity-one, maximum-loss-below-$150 synthetic CLI transport preview passed with submission disabled. The synthetic preview is test evidence, not a strategy recommendation.
 
+The strategy container now runs `contest_agent.py`, not the inherited wheel entrypoint. It consumes the current dynamic shortlist, a completed Alpaca minute bar, source-attributed Finnhub catalysts, optional yfinance and FRED research, three independent Featherless analyses, the defined-risk structure selector, deterministic allocation, the CLI preview/promotion boundary, reconciliation, exit-plan persistence, and decision journaling. When the market is closed it performs no research calls or entry work. Local paper configuration enables this path in shadow/dry-run mode; submission remains separately gated.
+
 ## Persistence and restart
 
 `DECISION_TRACE_PATH` is an append-only JSONL journal. Each revision contains the complete evidence bundle, independent analyses, proposals, objections, risk decisions, commands, broker events, position assessments, replay fingerprint, and non-sensitive display metadata. The latest revision per trace is authoritative for the read-only dashboard.

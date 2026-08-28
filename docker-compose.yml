@@ -78,7 +78,7 @@ services:
         required: false
     environment:
       BOT_ENVIRONMENT: paper
-      BOT_STRATEGY: tier1_wheel
+      BOT_STRATEGY: defined_risk_options
       TRADING_LANE: options_paper
       ACTIVE_BROKER: alpaca
       AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}
@@ -95,7 +95,10 @@ services:
       M6_MAX_SUBMISSIONS_PER_PROCESS: ${M6_MAX_SUBMISSIONS_PER_PROCESS:-1}
       M6_MAX_AUTHORIZED_LOSS_USD: ${M6_MAX_AUTHORIZED_LOSS_USD:-150}
       M6_MAX_OPEN_ORDERS: ${M6_MAX_OPEN_ORDERS:-4}
+      M6_MAX_CANDIDATES_PER_CYCLE: ${M6_MAX_CANDIDATES_PER_CYCLE:-5}
+      M6_AGENT_LOOP_SECONDS: ${M6_AGENT_LOOP_SECONDS:-60}
       DECISION_TRACE_PATH: /app/logs/decision-traces.jsonl
+      EXIT_PLAN_PATH: /app/logs/exit-plans.jsonl
       MARKET_DATA_PROVIDER: alpaca
       ALLOW_MOCK_DATA_FALLBACK: "false"
       ALLOW_MOCK_IV_RANK: "false"
@@ -120,6 +123,7 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       scheduler: {condition: service_started}
+    command: ["python", "contest_agent.py"]
 
   monitor-dash:
     build: ./services/monitor-dash

@@ -120,6 +120,15 @@ def test_paper_promotion_has_no_credentials_and_submission_requires_three_gates(
     assert "M6_BOUNDED_SUBMISSION_ACK" in runtime_source
 
 
+def test_contest_entrypoint_is_paper_only_and_has_no_live_endpoint_or_raw_subprocess():
+    source = (ROOT / "services/strategy-engine/contest_agent.py").read_text(encoding="utf-8")
+    assert "https://api.alpaca.markets" not in source
+    assert "subprocess" not in source
+    assert "AlpacaCliGateway" in source
+    assert "PAPER_ORDER_SUBMISSION_ENABLED" in source
+    assert "load_current_shortlist" in source
+
+
 def test_default_test_run_cannot_load_local_secret_file():
     source = (ROOT / "tests/test_integration_feeds.py").read_text(encoding="utf-8")
     assert ".env.secrets" not in source
