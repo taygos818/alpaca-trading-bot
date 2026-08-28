@@ -148,7 +148,11 @@ class MonitorDashTests(unittest.TestCase):
     def test_agents_page_truthfully_handles_empty_journal(self):
         response = self.client.get("/agents")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Why the agent acted", response.data)
+        self.assertIn(b"Taygos818's Alpaca Hackathon Dashboard", response.data)
+        self.assertIn(b'id="traceSearch"', response.data)
+        self.assertIn(b'id="outcomeFilter"', response.data)
+        self.assertIn(b'id="inspector"', response.data)
+        self.assertIn(b"PAPER ACCOUNT ONLY", response.data)
         payload = self.client.get("/api/agent-decisions").get_json()
         self.assertEqual(payload, {"status": "ok", "count": 0, "records": []})
 
