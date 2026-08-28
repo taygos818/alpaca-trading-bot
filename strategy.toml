@@ -1,0 +1,54 @@
+[portfolio]
+cash_buffer_pct = 0.10
+max_concurrent_positions = 5
+
+[watchlists]
+tier1 = ["SPY", "QQQ", "MSFT", "AAPL"]
+tier2 = ["SPY", "QQQ", "MSFT", "AAPL", "NVDA"]
+tier3 = ["SPY", "QQQ"]
+
+[weights]
+SPY = 0.40
+QQQ = 0.30
+MSFT = 0.15
+AAPL = 0.15
+
+[wheel]
+min_iv_rank = 30
+vix_pause_threshold = 35
+target_delta = 0.25
+min_dte = 30
+max_dte = 45
+roll_dte = 7
+profit_take_pct = 0.50
+
+[swing]
+ema_fast = 9
+ema_slow = 21
+rsi_period = 2
+rsi_entry_threshold = 15
+atr_stop_multiple = 2.0
+risk_reward_ratio = 3.0
+max_trade_risk_pct = 0.01
+max_concentration_pct = 0.15
+allow_scaling = true
+dca_dip_pct = 0.025
+pyramid_profit_pct = 0.020
+add_cooldown_seconds = 300
+
+
+[intraday]
+roc_period_minutes = 1
+rsi_period_minutes = 5
+daily_loss_limit_pct = 0.02
+flatten_hour_et = 15
+flatten_minute_et = 50
+max_trade_risk_pct = 0.01
+max_concentration_pct = 0.15
+
+[risk]
+max_trade_risk_pct = 0.05
+daily_drawdown_limit_pct = 0.10
+max_concentration_pct = 0.40
+
+

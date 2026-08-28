@@ -1,0 +1,115 @@
+name: alpaca-trading-bot-paper
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: alpaca_agent_paper
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PAPER_POSTGRES_PASSWORD:?set PAPER_POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${PAPER_POSTGRES_PORT:-56433}:5432"
+    volumes:
+      - alpaca_agent_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d alpaca_agent_paper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${PAPER_REDIS_PORT:-57380}:6379"
+    volumes:
+      - alpaca_agent_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alpaca-mcp:
+    profiles: ["research"]
+    build: ./services/alpaca-mcp
+    restart: unless-stopped
+    env_file:
+      - path: .env.paper.secrets
+        required: false
+    environment:
+      ALPACA_PAPER_TRADE: "true"
+      ALPACA_TOOLSETS: ${ALPACA_MCP_TOOLSETS:-account,assets,stock-data,options-data,index-data,corporate-actions,news}
+    command: ["alpaca-mcp-server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "127.0.0.1:${ALPACA_MCP_HOST_PORT:-8181}:8080"
+
+  scheduler:
+    build: ./services/scheduler
+    restart: unless-stopped
+    env_file:
+      - path: .env.paper.secrets
+        required: false
+    environment:
+      BOT_ENVIRONMENT: paper
+      ALPACA_PAPER_TRADE: "true"
+      ALPACA_TRADING_API_URL: https://paper-api.alpaca.markets
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_DSN: host=postgres port=5432 dbname=alpaca_agent_paper user=postgres password=${PAPER_POSTGRES_PASSWORD}
+      HEARTBEAT_PATH: /app/paper-data/scheduler-heartbeat
+      DISCOVERY_OUTPUT_PATH: /app/paper-data/market-shortlist.json
+      PREMARKET_DISCOVERY_OUTPUT_PATH: /app/paper-data/premarket-watchlist.json
+      ALLOW_MOCK_DATA_FALLBACK: "false"
+    volumes:
+      - ./paper-data:/app/paper-data
+      - ./paper-logs/scheduler:/app/logs
+      - ./services/strategy-engine/utils:/app/utils:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  strategy-engine:
+    build: ./services/strategy-engine
+    restart: unless-stopped
+    env_file:
+      - path: .env.paper.secrets
+        required: false
+    environment:
+      BOT_ENVIRONMENT: paper
+      BOT_STRATEGY: tier1_wheel
+      TRADING_LANE: options_paper
+      ACTIVE_BROKER: alpaca
+      ALPACA_PAPER_TRADE: "true"
+      ALPACA_TRADING_API_URL: https://paper-api.alpaca.markets
+      ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}
+      PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}
+      MARKET_DATA_PROVIDER: alpaca
+      ALLOW_MOCK_DATA_FALLBACK: "false"
+      ALLOW_MOCK_IV_RANK: "false"
+      REQUIRE_BROKER_STATE_FOR_TRADES: "true"
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_DSN: host=postgres port=5432 dbname=alpaca_agent_paper user=postgres password=${PAPER_POSTGRES_PASSWORD}
+      STRATEGY_CONFIG_PATH: /app/strategy.toml
+      HEARTBEAT_PATH: /app/paper-data/engine-heartbeat
+      ORDER_LOG_PATH: /app/logs/orders.jsonl
+      TRADE_LOG_PATH: /app/logs/trades.jsonl
+      MAX_TRADE_RISK_PCT: ${MAX_TRADE_RISK_PCT:-0.01}
+      DAILY_DRAWDOWN_LIMIT: ${DAILY_DRAWDOWN_LIMIT:-0.03}
+      MAX_CONCENTRATION_PCT: ${MAX_CONCENTRATION_PCT:-0.15}
+      MAX_GROSS_EXPOSURE_PCT: ${MAX_GROSS_EXPOSURE_PCT:-0.50}
+      MIN_CASH_BUFFER_PCT: ${MIN_CASH_BUFFER_PCT:-0.20}
+    volumes:
+      - ./paper-data:/app/paper-data
+      - ./paper-logs/strategy-engine:/app/logs
+      - ./strategy.toml:/app/strategy.toml:ro
+      - ./infra:/app/infra:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      scheduler: {condition: service_started}
+
+volumes:
+  alpaca_agent_postgres_data:
+  alpaca_agent_redis_data:

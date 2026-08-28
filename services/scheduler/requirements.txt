@@ -1,0 +1,7 @@
+apscheduler>=3.10,<4.0
+redis>=5.0,<6.0
+requests>=2.32,<3.0
+psycopg[binary]>=3.2,<3.3
+robin-stocks>=3.4.0
+pyotp>=2.9.0
+alpaca-py>=0.30.0

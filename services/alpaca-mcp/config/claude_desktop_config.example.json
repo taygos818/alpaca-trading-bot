@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "alpaca-local": {
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:8181/mcp"
+      }
+    }
+  }
+}

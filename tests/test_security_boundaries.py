@@ -1,0 +1,72 @@
+import re
+import subprocess
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_compose_is_isolated_and_paper_only():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "name: alpaca-trading-bot-paper" in compose
+    assert "https://paper-api.alpaca.markets" in compose
+    assert "https://api.alpaca.markets" not in compose
+    assert 'ALPACA_PAPER_TRADE: "true"' in compose
+    assert "BOT_ENVIRONMENT: live" not in compose
+    assert "TRADING_LANE: options_live" not in compose
+    assert "ALPACA_LIVE_" not in compose
+    assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in compose
+    assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
+    assert "alpaca_agent_postgres_data" in compose
+    assert "alpaca_agent_redis_data" in compose
+    assert "127.0.0.1:${PAPER_POSTGRES_PORT:-56433}:5432" in compose
+    assert "127.0.0.1:${PAPER_REDIS_PORT:-57380}:6379" in compose
+
+
+def test_mcp_is_paper_only_local_and_profile_gated():
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    mcp_section = compose.split("  alpaca-mcp:", 1)[1].split("  scheduler:", 1)[0]
+
+    assert 'profiles: ["research"]' in mcp_section
+    assert 'ALPACA_PAPER_TRADE: "true"' in mcp_section
+    assert "127.0.0.1:${ALPACA_MCP_HOST_PORT:-8181}:8080" in mcp_section
+    assert ".env.paper.secrets" in mcp_section
+
+
+def test_obsolete_ai_modules_and_live_artifacts_are_absent():
+    assert not (ROOT / "services/strategy-engine/ai_committee.py").exists()
+    assert not (ROOT / "services/strategy-engine/ai_market_analyzer.py").exists()
+    assert not (ROOT / "scripts/live_canary_activation.py").exists()
+    assert not (ROOT / "scripts/live_liquidation_monitor.py").exists()
+    assert not (ROOT / "LIVE_SETUP.md").exists()
+
+
+def test_default_test_run_cannot_load_local_secret_file():
+    source = (ROOT / "tests/test_integration_feeds.py").read_text(encoding="utf-8")
+    assert ".env.secrets" not in source
+    assert "RUN_LIVE_INTEGRATION_TESTS" in source
+
+
+def test_tracked_files_do_not_contain_alpaca_key_material():
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True
+    ).stdout.decode().split("\0")
+    alpaca_key_id = re.compile(r"\bAK[A-Z0-9]{20,}\b")
+    alpaca_secret = re.compile(r"\b[A-Za-z0-9]{35,}\b")
+    findings = []
+    for relative_path in filter(None, tracked):
+        path = ROOT / relative_path
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if alpaca_key_id.search(content):
+            findings.append(f"possible Alpaca key ID in {relative_path}")
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            secret_assignment = re.search(r"(?:SECRET|API_KEY)[A-Z0-9_]*\s*[:=]", line.upper())
+            if secret_assignment and alpaca_secret.search(line) and "replace" not in line.lower():
+                findings.append(f"possible secret in {relative_path}:{line_number}")
+    assert findings == []

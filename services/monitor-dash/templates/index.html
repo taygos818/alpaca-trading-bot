@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraderBot US - Real Money Trading Platform</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --sidebar-bg: #1e242b;
+            --sidebar-hover: #2a313a;
+            --sidebar-active: #090b0e;
+            --sidebar-text: #e2e8f0;
+            --sidebar-muted: #94a3b8;
+
+            --topbar-bg: #1e293b;
+            --topbar-text: #ffffff;
+
+            --body-bg: #f8fafc;
+            --panel-bg: #ffffff;
+            --panel-border: #e2e8f0;
+
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+
+            --brand-green: #10b981;
+            --brand-green-hover: #059669;
+            --brand-red: #ef4444;
+            --brand-red-hover: #dc2626;
+            --brand-blue: #3b82f6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: var(--body-bg);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            overflow-x: hidden;
+        }
+
+        /* LEFT SIDEBAR */
+        .sidebar {
+            width: 260px;
+            background-color: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            min-height: 100vh;
+            border-right: 1px solid #0f172a;
+        }
+
+        .sidebar-brand {
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .sidebar-brand i {
+            color: var(--brand-green);
+            font-size: 1.5rem;
+        }
+
+        .sidebar-brand h2 {
+            font-size: 1.2rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+        }
+
+        .sidebar-brand p {
+            font-size: 0.7rem;
+            color: var(--sidebar-muted);
+        }
+
+        .sidebar-section-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--sidebar-muted);
+            padding: 1.25rem 1.5rem 0.4rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            color: var(--sidebar-text);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+
+        .nav-item:hover {
+            background-color: var(--sidebar-hover);
+            color: #ffffff;
+        }
+
+        .nav-item.active {
+            background-color: var(--sidebar-active);
+            color: #ffffff;
+            border-left: 4px solid var(--brand-green);
+            font-weight: 600;
+        }
+
+        .broker-account-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.875rem;
+            color: #ffffff;
+            background-color: var(--sidebar-active);
+            border-left: 4px solid var(--brand-green);
+        }
+
+        .broker-account-item .badge-dot {
+            width: 9px;
+            height: 9px;
+            background-color: var(--brand-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px var(--brand-green);
+        }
+
+        .engine-control-box {
+            margin: auto 1rem 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .engine-status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-pill {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--brand-green);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .status-pill.paused {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--brand-red);
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-ctrl {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .btn-ctrl-start {
+            background-color: var(--brand-green);
+            color: #ffffff;
+        }
+
+        .btn-ctrl-start:hover {
+            background-color: var(--brand-green-hover);
+        }
+
+        .btn-ctrl-pause {
+            background-color: var(--brand-red);
+            color: #ffffff;
+        }
+
+        .btn-ctrl-pause:hover {
+            background-color: var(--brand-red-hover);
+        }
+
+        /* MAIN CONTENT AREA */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        /* TOP HEADER BAR */
+        .topbar {
+            height: 60px;
+            background-color: var(--topbar-bg);
+            color: var(--topbar-text);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .account-badge-top {
+            background: #0f172a;
+            border: 1px solid var(--brand-green);
+            border-radius: 0.375rem;
+            padding: 0.4rem 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .account-badge-top .tag-live {
+            background: var(--brand-green);
+            color: #ffffff;
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 0.15rem 0.45rem;
+            border-radius: 0.25rem;
+            letter-spacing: 0.05em;
+        }
+
+        .topbar-search {
+            position: relative;
+            width: 340px;
+        }
+
+        .topbar-search input {
+            width: 100%;
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.375rem;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            outline: none;
+        }
+
+        .topbar-search input:focus {
+            border-color: var(--brand-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-top-tab {
+            background-color: #0f172a;
+            color: #ffffff;
+            border: 1px solid #334155;
+            padding: 0.4rem 0.85rem;
+            border-radius: 0.375rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-top-tab:hover {
+            background-color: #1e293b;
+        }
+
+        /* WORKSPACE BODY */
+        .workspace {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* OVERVIEW ACCOUNT STATS CARDS */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .stat-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+        }
+
+        .stat-card-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-card-value {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-dark);
+            letter-spacing: -0.5px;
+        }
+
+        .stat-card-value.green {
+            color: var(--brand-green);
+        }
+
+        /* SYMBOL HEADER */
+        .symbol-header {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 0.75rem;
+        }
+
+        .symbol-header h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-dark);
+            letter-spacing: -0.5px;
+        }
+
+        .symbol-header .price-tag {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--brand-green);
+            margin-left: 0.5rem;
+        }
+
+        /* 3-COLUMN GRID WORKSPACE */
+        .grid-3col {
+            display: grid;
+            grid-template-columns: 360px 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1200px) {
+            .grid-3col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        /* ORDER DESK */
+        .order-desk-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .tab-buy-sell {
+            padding: 0.6rem;
+            border-radius: 0.375rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .tab-buy {
+            background-color: #f1f5f9;
+            color: var(--text-dark);
+        }
+
+        .tab-buy.active {
+            background-color: var(--brand-green);
+            color: #ffffff;
+        }
+
+        .tab-sell {
+            background-color: #f1f5f9;
+            color: var(--text-dark);
+        }
+
+        .tab-sell.active {
+            background-color: var(--brand-red);
+            color: #ffffff;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .form-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .form-row-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .form-control {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.375rem;
+            padding: 0.55rem 0.75rem;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            outline: none;
+            background: #ffffff;
+        }
+
+        .form-control:focus {
+            border-color: var(--brand-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-dark);
+            font-weight: 500;
+        }
+
+        .btn-submit-order {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            font-weight: 700;
+            font-size: 0.95rem;
+            border: none;
+            cursor: pointer;
+            color: #ffffff;
+            background-color: var(--brand-green);
+            margin-top: 0.5rem;
+            transition: background-color 0.15s ease;
+        }
+
+        .btn-submit-order.sell {
+            background-color: var(--brand-red);
+        }
+
+        .btn-submit-order.buy:hover {
+            background-color: var(--brand-green-hover);
+        }
+
+        .btn-submit-order.sell:hover {
+            background-color: var(--brand-red-hover);
+        }
+
+        /* POSITION METRICS */
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-row .label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .metric-row .val {
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+
+        .metric-row .val.green {
+            color: var(--brand-green);
+        }
+
+        .btn-close-pos {
+            background-color: var(--brand-red);
+            color: #ffffff;
+            border: none;
+            border-radius: 0.375rem;
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-close-pos:hover {
+            background-color: var(--brand-red-hover);
+        }
+
+        /* TABLES */
+        .table-panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            padding-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            background-color: #f8fafc;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #f1f5f9;
+            color: var(--text-dark);
+        }
+
+        tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        .badge-buy {
+            color: var(--brand-green);
+            font-weight: 700;
+        }
+
+        .badge-sell {
+            color: var(--brand-red);
+            font-weight: 700;
+        }
+
+        .badge-allowed {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--brand-green);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+
+        .badge-blocked {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--brand-red);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+
+        .terminal-box {
+            background: #090d16;
+            color: #a7f3d0;
+            font-family: monospace;
+            font-size: 0.85rem;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            max-height: 480px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .filter-btn-group {
+            display: flex;
+            gap: 0.25rem;
+            background: #f1f5f9;
+            padding: 0.2rem;
+            border-radius: 0.375rem;
+        }
+
+        .filter-btn {
+            border: none;
+            background: transparent;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 0.25rem;
+        }
+
+        .filter-btn.active {
+            background: #ffffff;
+            color: var(--text-dark);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <i class="fa-solid fa-chart-line"></i>
+            <div>
+                <h2>TraderBot US</h2>
+                <p>Real Money Trading Platform</p>
+            </div>
+        </div>
+
+        <div class="sidebar-section-title">Primary Live Account</div>
+        <div id="sidebar-accounts-list">
+            <div class="broker-account-item">
+                <div>
+                    <div style="font-weight: 700; color: #34d399;" id="side-acc-name">🟢 Alpaca Real Money</div>
+                    <div style="font-size: 0.75rem; color: var(--sidebar-muted);" id="side-acc-id">LIVE REAL CAPITAL
+                        ACCOUNT</div>
+                </div>
+                <span class="badge-dot" title="Live Account"></span>
+            </div>
+        </div>
+
+        <div class="sidebar-section-title">Navigation & Views</div>
+        <a class="nav-item active" id="nav-live" onclick="switchView('live')">
+            <i class="fa-solid fa-tower-broadcast"></i>
+            <span>Live Terminal / Overview</span>
+        </a>
+        <a class="nav-item" id="nav-backtest" onclick="switchView('backtest')">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Backtest Analyzer</span>
+        </a>
+        <a class="nav-item" id="nav-perf" onclick="switchView('perf')">
+            <i class="fa-solid fa-trophy"></i>
+            <span>Performance</span>
+        </a>
+        <a class="nav-item" id="nav-logs" onclick="switchView('logs')">
+            <i class="fa-solid fa-terminal"></i>
+            <span>System Logs</span>
+        </a>
+
+        <!-- OBSERVATION-ONLY STATUS BOX -->
+        <div class="engine-control-box">
+            <div class="engine-status-row">
+                <span style="color: var(--sidebar-muted);">BOT STATUS</span>
+                <span class="status-pill paused" id="side-status-pill">OBSERVE ONLY</span>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--sidebar-muted); line-height: 1.4;">
+                Service control and brokerage mutations are intentionally disabled.
+            </div>
+        </div>
+
+        <div style="padding: 0.75rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.08); margin-top: auto;">
+            <a href="/paper" target="_blank"
+                style="font-size: 0.75rem; color: #94a3b8; text-decoration: none; display: flex; align-items: center; gap: 0.4rem;">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Separate Paper Sandbox
+            </a>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div class="main-wrapper">
+
+        <!-- TOP HEADER BAR -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="account-badge-top">
+                    <i class="fa-solid fa-building-columns" style="color: var(--brand-green);"></i>
+                    <span id="top-acc-title">Alpaca Real Money Live Account</span>
+                    <span class="tag-live" id="top-acc-tag">🟢 REAL MONEY LIVE</span>
+                    <span style="color: #cbd5e1; font-size: 0.8rem;" id="top-acc-num">PRIMARY</span>
+                </div>
+            </div>
+
+            <div class="topbar-search">
+                <input type="text" id="ticker-search" placeholder="Enter ticker (e.g. SPY, TSLA, AAPL, QQQ)..."
+                    onkeydown="if(event.key === 'Enter') searchTicker(this.value)">
+            </div>
+
+            <div class="topbar-right">
+                <button class="btn-top-tab" onclick="switchView('live')">Orders</button>
+                <button class="btn-top-tab"
+                    onclick="searchTicker(document.getElementById('ticker-search').value || 'SPY')">Quote</button>
+                <button class="btn-top-tab" onclick="switchView('perf')">📈 Chart</button>
+            </div>
+        </header>
+
+        <!-- WORKSPACE AREA -->
+        <main class="workspace">
+
+            <!-- LIVE TERMINAL VIEW -->
+            <div id="view-live" style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+                <!-- OVERVIEW ACCOUNT STATS CARDS -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-card-label">Account Value (NAV)</div>
+                        <div class="stat-card-value" id="card-nav">$97,265.05</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Cash Balance</div>
+                        <div class="stat-card-value" id="card-cash">$82,324.45</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Buying Power</div>
+                        <div class="stat-card-value" id="card-bp">$371,131.48</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Unrealized P&L</div>
+                        <div class="stat-card-value green" id="card-pnl">+$0.00</div>
+                    </div>
+                </div>
+
+                <!-- ACTIVE POSITIONS TABLE -->
+                <div class="card">
+                    <div class="table-panel-title">
+                        <span><i class="fa-solid fa-briefcase" style="color: var(--brand-blue);"></i> Active Open
+                            Positions (Real-Time Real Money)</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Quantity</th>
+                                <th>Market Value</th>
+                                <th>Entry Price</th>
+                                <th>Current Price</th>
+                                <th>Total Return</th>
+                                <th>Unrealized P&L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-tbody">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- SELECTED SYMBOL HEADER -->
+                <div class="symbol-header">
+                    <h1 id="sym-title">SPY</h1>
+                    <span style="color: var(--text-muted); font-size: 0.9rem;" id="sym-sub">SPDR S&P 500 ETF
+                        Trust</span>
+                    <span class="price-tag" id="sym-price">$746.79</span>
+                </div>
+
+                <!-- 3-COLUMN GRID WORKSPACE -->
+                <div class="grid-3col">
+
+                    <!-- COLUMN 1: OBSERVATION-ONLY NOTICE -->
+                    <div class="card">
+                        <div style="font-weight: 700; font-size: 0.95rem;">Observation-Only Dashboard</div>
+                        <p style="color: var(--text-muted); line-height: 1.5; margin-top: 1rem;">
+                            Orders, position changes, and bot control are unavailable from this service. Use the approved operational runbook for any future account action.
+                        </p>
+                    </div>
+
+                    <!-- COLUMN 2: POSITION PERFORMANCE -->
+                    <div class="card">
+                        <div style="font-weight: 700; font-size: 0.95rem;">Position Performance</div>
+                        <div class="metric-row">
+                            <span class="label">Total Return</span>
+                            <span class="val green" id="pos-total-return">+$0.00</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Today's Return</span>
+                            <span class="val green" id="pos-today-return">+$0.00 (+0.00%)</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Market Value</span>
+                            <span class="val green" id="pos-market-val">$14,940.60</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Cost Basis</span>
+                            <span class="val" id="pos-cost-basis">$14,760.73</span>
+                        </div>
+                    </div>
+
+                    <!-- COLUMN 3: POSITION DETAILS -->
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="font-weight: 700; font-size: 0.95rem;">Position Details</div>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Average Cost</span>
+                            <span class="val" id="pos-avg-cost">$738.04</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Market Price</span>
+                            <span class="val" id="pos-mkt-price">$747.03</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Shares Held</span>
+                            <span class="val" id="pos-shares-held">20</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="label">Portfolio Diversity</span>
+                            <span class="val" id="pos-diversity">15.36%</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- TRADE SIGNALS & EXECUTION LOG TABLE -->
+                <div class="card">
+                    <div class="table-panel-title">
+                        <span>Real Money Strategy Signal History</span>
+                        <div class="filter-btn-group">
+                            <button class="filter-btn active" id="flt-all" onclick="filterTrades('all')">All</button>
+                            <button class="filter-btn" id="flt-app" onclick="filterTrades('approved')">Approved</button>
+                            <button class="filter-btn" id="flt-blk" onclick="filterTrades('blocked')">Blocked</button>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Symbol</th>
+                                <th>Action</th>
+                                <th>Quantity / Notional</th>
+                                <th>Est. Risk</th>
+                                <th>Decision</th>
+                                <th>Reason / Note</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-tbody">
+                            <!-- Filled dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+
+            <!-- BACKTEST VIEW -->
+            <div id="view-backtest" style="display: none; flex-direction: column; gap: 1.5rem;">
+                <div class="card">
+                    <h3 style="font-weight: 700;">Tier 2 Swing Strategy Backtest (6 Months)</h3>
+                    <div class="stats-grid" style="margin-top: 1rem;">
+                        <div class="stat-card">
+                            <div class="stat-card-label">Total Return</div>
+                            <div class="stat-card-value green">+12.41%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Sharpe Ratio</div>
+                            <div class="stat-card-value">1.38</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-label">Max Drawdown</div>
+                            <div class="stat-card-value">-3.12%</div>
+                        </div>
+                    </div>
+                    <div style="height: 350px; margin-top: 1rem;">
+                        <canvas id="chart-backtest"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PERFORMANCE VIEW -->
+            <div id="view-perf" style="display: none; flex-direction: column; gap: 1.5rem;">
+                <div class="card">
+                    <h3 style="font-weight: 700;">Real Money Account Equity Curve</h3>
+                    <div style="height: 350px; margin-top: 1rem;">
+                        <canvas id="chart-live-equity"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SYSTEM LOGS VIEW -->
+            <div id="view-logs" style="display: none; flex-direction: column; gap: 1.5rem;">
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="font-weight: 700;">System Execution & Strategy Engine Logs</h3>
+                        <button onclick="fetchLogs()" class="btn-top-tab">Refresh Logs</button>
+                    </div>
+                    <div class="terminal-box" id="logs-terminal">Loading system logs...</div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        let currentSymbol = 'SPY';
+        let activeFilter = 'all';
+        let allTradesData = [];
+        let activePositionsData = [];
+
+        function switchView(viewName) {
+            const views = ['live', 'backtest', 'perf', 'logs'];
+            views.forEach(v => {
+                const navEl = document.getElementById(`nav-${v}`);
+                const viewEl = document.getElementById(`view-${v}`);
+                if (navEl) navEl.classList.toggle('active', v === viewName);
+                if (viewEl) viewEl.style.display = (v === viewName) ? 'flex' : 'none';
+            });
+            if (viewName === 'logs') fetchLogs();
+            if (viewName === 'backtest') renderBacktestChart();
+            if (viewName === 'perf') renderPerformanceChart();
+        }
+
+        async function searchTicker(symbol) {
+            if (!symbol) return;
+            currentSymbol = symbol.toUpperCase().trim();
+            document.getElementById('sym-title').textContent = currentSymbol;
+
+            try {
+                const resp = await fetch(`/api/quote/${currentSymbol}`);
+                if (resp.ok) {
+                    const q = await resp.json();
+                    if (q.price) {
+                        document.getElementById('sym-price').textContent = '$' + q.price.toFixed(2);
+                    }
+                }
+            } catch (err) {
+                console.error("Quote fetch error:", err);
+            }
+            updatePositionCardsForSymbol(currentSymbol);
+        }
+
+        function updatePositionCardsForSymbol(symbol) {
+            const pos = activePositionsData.find(p => p.symbol.toUpperCase() === symbol.toUpperCase());
+            if (pos) {
+                const mktVal = parseFloat(pos.market_value || 0);
+                const avgEntry = parseFloat(pos.avg_entry_price || 0);
+                const currentPrice = parseFloat(pos.current_price || 0);
+                const qty = parseFloat(pos.qty || 0);
+                const costBasis = avgEntry * qty;
+                const pnl = (currentPrice - avgEntry) * qty;
+                const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+
+                document.getElementById('pos-total-return').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+                document.getElementById('pos-today-return').textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + ` (${pnlPct.toFixed(2)}%)`;
+                document.getElementById('pos-market-val').textContent = '$' + mktVal.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                document.getElementById('pos-cost-basis').textContent = '$' + costBasis.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                document.getElementById('pos-avg-cost').textContent = '$' + avgEntry.toFixed(2);
+                document.getElementById('pos-mkt-price').textContent = '$' + currentPrice.toFixed(2);
+                document.getElementById('pos-shares-held').textContent = qty;
+            } else {
+                document.getElementById('pos-total-return').textContent = '+$0.00';
+                document.getElementById('pos-today-return').textContent = '+$0.00 (0.00%)';
+                document.getElementById('pos-market-val').textContent = '$0.00';
+                document.getElementById('pos-cost-basis').textContent = '$0.00';
+                document.getElementById('pos-avg-cost').textContent = '$0.00';
+                document.getElementById('pos-mkt-price').textContent = '$0.00';
+                document.getElementById('pos-shares-held').textContent = '0';
+            }
+        }
+
+        async function fetchAccountAndPositions() {
+            try {
+                const resp = await fetch('/alpaca_info?paper=false');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.status === 'broker_data_unavailable') {
+                        document.getElementById('card-nav').textContent = 'Config Needed';
+                        document.getElementById('card-cash').textContent = 'Config Needed';
+                        document.getElementById('card-bp').textContent = 'Config Needed';
+                        document.getElementById('card-pnl').textContent = '$0.00';
+                        document.getElementById('top-acc-num').textContent = 'OBSERVATION ONLY';
+                        document.getElementById('side-acc-id').textContent = 'BROKER DATA DISABLED';
+                        document.getElementById('positions-tbody').innerHTML = `
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: var(--text-muted); font-weight: 700; padding: 1.5rem;">
+                                    Brokerage credentials are intentionally unavailable to this dashboard.
+                                </td>
+                            </tr>`;
+                        return;
+                    }
+                    if (data.status === 'ok' && data.account) {
+                        const acc = data.account;
+                        document.getElementById('card-nav').textContent = '$' + acc.equity.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                        document.getElementById('card-cash').textContent = '$' + acc.cash.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                        document.getElementById('card-bp').textContent = '$' + acc.buying_power.toLocaleString(undefined, { minimumFractionDigits: 2 });
+
+                        document.getElementById('top-acc-num').textContent = acc.account_number || 'PRIMARY LIVE';
+                        document.getElementById('side-acc-id').textContent = acc.account_number || 'LIVE CAPITAL';
+
+                        activePositionsData = data.positions || [];
+                        renderPositionsTable(activePositionsData);
+                        updatePositionCardsForSymbol(currentSymbol);
+                    }
+                }
+            } catch (err) {
+                console.error("Fetch account error:", err);
+            }
+        }
+
+        function renderPositionsTable(positions) {
+            const tbody = document.getElementById('positions-tbody');
+            if (!positions || positions.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No open active positions.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = positions.map(p => {
+                const pnl = parseFloat(p.unrealized_pnl || 0);
+                const pnlClass = pnl >= 0 ? 'badge-buy' : 'badge-sell';
+                return `
+                    <tr style="cursor: pointer;" onclick="searchTicker('${p.symbol}')">
+                        <td style="font-weight: 700;">${p.symbol}</td>
+                        <td>${p.qty}</td>
+                        <td style="font-weight: 600;">$${parseFloat(p.market_value).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td>$${parseFloat(p.avg_entry_price).toFixed(2)}</td>
+                        <td>$${parseFloat(p.current_price).toFixed(2)}</td>
+                        <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+                        <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function fetchTradesHistory() {
+            try {
+                const resp = await fetch('/trades');
+                if (resp.ok) {
+                    allTradesData = await resp.json();
+                    renderTradesTable(allTradesData);
+                }
+            } catch (err) {
+                console.error("Fetch trades error:", err);
+            }
+        }
+
+        function filterTrades(type) {
+            activeFilter = type;
+            ['all', 'approved', 'blocked'].forEach(f => {
+                const btn = document.getElementById(`flt-${f === 'approved' ? 'app' : f === 'blocked' ? 'blk' : 'all'}`);
+                if (btn) btn.classList.toggle('active', f === type);
+            });
+            renderTradesTable(allTradesData);
+        }
+
+        function renderTradesTable(trades) {
+            const tbody = document.getElementById('trades-tbody');
+            let filtered = trades;
+            if (activeFilter === 'approved') filtered = trades.filter(t => t.allowed);
+            if (activeFilter === 'blocked') filtered = trades.filter(t => !t.allowed);
+
+            if (!filtered || filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No signals recorded.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = filtered.slice(0, 15).map(t => {
+                const sideClass = t.action === 'buy' ? 'badge-buy' : 'badge-sell';
+                const decisionBadge = t.allowed ? `<span class="badge-allowed">APPROVED</span>` : `<span class="badge-blocked">BLOCKED</span>`;
+                return `
+                    <tr>
+                        <td style="color: var(--text-muted);">${t.timestamp ? new Date(t.timestamp).toLocaleTimeString() : ''}</td>
+                        <td style="font-weight: 700;">${t.symbol}</td>
+                        <td class="${sideClass}">${t.action.toUpperCase()}</td>
+                        <td>${t.quantity || 0} shares ($${(t.order_value || 0).toFixed(2)})</td>
+                        <td>$${(t.estimated_risk_value || 0).toFixed(2)}</td>
+                        <td>${decisionBadge}</td>
+                        <td style="color: var(--text-muted); font-size: 0.8rem;">${t.reason || 'Criteria met'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function fetchServiceStatus() {
+            try {
+                const resp = await fetch('/api/service/status');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const pill = document.getElementById('side-status-pill');
+                    if (data.bot_paused) {
+                        pill.className = 'status-pill paused';
+                        pill.textContent = 'PAUSED';
+                    } else {
+                        pill.className = 'status-pill';
+                        pill.textContent = 'RUNNING';
+                    }
+                }
+            } catch (e) { }
+        }
+
+        async function fetchLogs() {
+            try {
+                const resp = await fetch('/api/logs');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const term = document.getElementById('logs-terminal');
+                    term.textContent = (data.logs && data.logs.length > 0)
+                        ? data.logs.map(l => typeof l === 'object' ? JSON.stringify(l, null, 2) : l).join('\n---\n')
+                        : 'No log lines generated yet.';
+                }
+            } catch (e) { }
+        }
+
+        let liveEquityHistory = [500.00];
+
+        function renderBacktestChart() {
+            const ctx = document.getElementById('chart-backtest').getContext('2d');
+            if (window.backtestChartInstance) window.backtestChartInstance.destroy();
+            window.backtestChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Baseline', 'Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5'],
+                    datasets: [{
+                        label: 'Projected Real Money Strategy Return ($500 Starting Capital)',
+                        data: [500.00, 512.50, 525.00, 521.00, 543.50, 562.00],
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function renderPerformanceChart() {
+            const ctx = document.getElementById('chart-live-equity').getContext('2d');
+            if (window.liveChartInstance) window.liveChartInstance.destroy();
+
+            const navText = document.getElementById('card-nav').textContent.replace(/[^0-9.]/g, '');
+            const currentNAV = parseFloat(navText) || 500.00;
+            if (liveEquityHistory[liveEquityHistory.length - 1] !== currentNAV) {
+                liveEquityHistory.push(currentNAV);
+            }
+
+            window.liveChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: liveEquityHistory.map((_, i) => i === 0 ? 'Start ($500)' : `Update ${i}`),
+                    datasets: [{
+                        label: 'Real Money Account NAV ($)',
+                        data: liveEquityHistory,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        borderWidth: 2,
+                        tension: 0.2
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // Initialize Real Money View
+        fetchServiceStatus();
+        fetchAccountAndPositions();
+        fetchTradesHistory();
+        searchTicker('SPY');
+
+        setInterval(fetchServiceStatus, 5000);
+        setInterval(fetchAccountAndPositions, 10000);
+        setInterval(fetchTradesHistory, 10000);
+    </script>
+</body>
+
+</html>

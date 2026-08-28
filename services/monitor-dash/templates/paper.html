@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TraderBot US - Paper Trading Sandbox</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --sidebar-bg: #1e242b;
+            --topbar-bg: #451a03;
+            --topbar-text: #ffffff;
+            --body-bg: #fffbe0;
+            --panel-bg: #ffffff;
+            --panel-border: #fef08a;
+            --text-dark: #451a03;
+            --text-muted: #78350f;
+            --brand-yellow: #f59e0b;
+            --brand-green: #10b981;
+            --brand-red: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: #fefce8; color: var(--text-dark); min-height: 100vh; display: flex; flex-direction: column; }
+
+        header {
+            background-color: #78350f;
+            color: #ffffff;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .badge-paper {
+            background: #f59e0b;
+            color: #ffffff;
+            padding: 0.3rem 0.75rem;
+            border-radius: 0.375rem;
+            font-weight: 800;
+            font-size: 0.85rem;
+        }
+
+        main { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
+        .card { background: #ffffff; border: 1px solid #fef08a; border-radius: 0.5rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .stat-label { font-size: 0.75rem; font-weight: 700; color: #78350f; text-transform: uppercase; }
+        .stat-val { font-size: 1.75rem; font-weight: 800; color: #451a03; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th { text-align: left; padding: 0.75rem; background: #fef9c3; color: #78350f; font-weight: 700; }
+        td { padding: 0.75rem; border-bottom: 1px solid #fef08a; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <i class="fa-solid fa-flask" style="font-size: 1.5rem; color: #f59e0b;"></i>
+            <div>
+                <h1 style="font-size: 1.25rem; font-weight: 800;">TraderBot US - Paper Sandbox</h1>
+                <p style="font-size: 0.75rem; color: #fef08a;">Isolated Paper Simulation Environment</p>
+            </div>
+        </div>
+        <span class="badge-paper">🟡 PAPER TRADING SIMULATION</span>
+    </header>
+
+    <main>
+        <div class="stats-grid">
+            <div class="card">
+                <div class="stat-label">Paper Account Equity</div>
+                <div class="stat-val" id="paper-nav">$100,000.00</div>
+            </div>
+            <div class="card">
+                <div class="stat-label">Paper Buying Power</div>
+                <div class="stat-val" id="paper-bp">$400,000.00</div>
+            </div>
+            <div class="card">
+                <div class="stat-label">Paper Cash Balance</div>
+                <div class="stat-val" id="paper-cash">$100,000.00</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="font-weight: 700; color: #451a03;">Paper Trading Active Positions</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Qty</th>
+                        <th>Market Value</th>
+                        <th>Avg Entry</th>
+                        <th>Current Price</th>
+                        <th>Unrealized P&L</th>
+                    </tr>
+                </thead>
+                <tbody id="paper-pos-tbody">
+                    <tr><td colspan="6" style="text-align: center; color: #78350f;">Loading paper positions...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        async function fetchPaperData() {
+            try {
+                const resp = await fetch('/alpaca_info?paper=true');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.status === 'ok' && data.account) {
+                        const acc = data.account;
+                        document.getElementById('paper-nav').textContent = '$' + acc.equity.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        document.getElementById('paper-cash').textContent = '$' + acc.cash.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        document.getElementById('paper-bp').textContent = '$' + acc.buying_power.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+                        const tbody = document.getElementById('paper-pos-tbody');
+                        const pos = data.positions || [];
+                        if (pos.length === 0) {
+                            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #78350f;">No paper positions open.</td></tr>';
+                        } else {
+                            tbody.innerHTML = pos.map(p => `
+                                <tr>
+                                    <td><b>${p.symbol}</b></td>
+                                    <td>${p.qty}</td>
+                                    <td>$${p.market_value.toFixed(2)}</td>
+                                    <td>$${p.avg_entry_price.toFixed(2)}</td>
+                                    <td>$${p.current_price.toFixed(2)}</td>
+                                    <td>$${p.unrealized_pnl.toFixed(2)}</td>
+                                </tr>
+                            `).join('');
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+        fetchPaperData();
+        setInterval(fetchPaperData, 10000);
+    </script>
+</body>
+</html>
