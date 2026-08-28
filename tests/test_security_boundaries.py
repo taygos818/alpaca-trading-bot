@@ -19,10 +19,12 @@ def test_compose_is_isolated_and_paper_only():
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in compose
     assert "AGENT_COORDINATOR_ENABLED: ${AGENT_COORDINATOR_ENABLED:-false}" in compose
     assert "AGENT_COORDINATOR_SHADOW_MODE: ${AGENT_COORDINATOR_SHADOW_MODE:-true}" in compose
-    assert "FINNHUB_ENABLED: ${FINNHUB_ENABLED:-false}" in compose
-    assert "YFINANCE_ENABLED: ${YFINANCE_ENABLED:-false}" in compose
-    assert "FRED_ENABLED: ${FRED_ENABLED:-false}" in compose
-    assert "FEATHERLESS_ANALYSIS_ENABLED: ${FEATHERLESS_ANALYSIS_ENABLED:-false}" in compose
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "FINNHUB_ENABLED=false" in env_example
+    assert "YFINANCE_ENABLED=false" in env_example
+    assert "FRED_ENABLED=false" in env_example
+    assert "FEATHERLESS_ANALYSIS_ENABLED=false" in env_example
+    assert "${FEATHERLESS_ANALYSIS_ENABLED" not in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
     assert "alpaca_agent_postgres_data" in compose
     assert "alpaca_agent_redis_data" in compose

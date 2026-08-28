@@ -10,7 +10,7 @@ Put the API key only in the ignored `.env.paper.secrets` file:
 FEATHERLESS_API_KEY=your-key-here
 ```
 
-Do not place the key in `.env.example`, Compose YAML, source code, logs, issues, chat, or screenshots. `FEATHERLESS_ANALYSIS_ENABLED` defaults to `false`; adding a key alone does not activate paid inference.
+Do not place the key in `.env.example`, Compose YAML, source code, logs, issues, chat, or screenshots. `FEATHERLESS_ANALYSIS_ENABLED` defaults to `false`; adding a key alone does not activate paid inference. Compose passes this secrets file directly into the strategy container, so provider flags and model settings should also be changed there rather than exported in the shell.
 
 The default registry entry is `Qwen/Qwen3-30B-A3B-Instruct-2507`, captured from Featherless's model catalog on 2026-08-28. It is an official Qwen instruct model with a 32K context window and one concurrency unit. A model ID outside the reviewed registry fails configuration instead of silently switching models.
 
