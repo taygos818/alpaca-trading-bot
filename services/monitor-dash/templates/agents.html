@@ -14,7 +14,15 @@
     .eyebrow { color:var(--green); font:750 10px/1.2 ui-monospace,monospace; letter-spacing:.12em; text-transform:uppercase; }
     h1 { margin:4px 0 2px; font:750 clamp(22px,3vw,33px)/1.05 Georgia,serif; }
     .subtitle { color:var(--muted); max-width:920px; font-size:12px; }
+    .status-stack { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
     .paper-pill { border:1px solid #9ac8b7; color:var(--green); background:#edf8f3; border-radius:999px; padding:6px 10px; font-weight:800; font-size:10px; white-space:nowrap; }
+    .heartbeat { border:1px solid var(--line); background:#fff; border-radius:9px; padding:6px 9px; min-width:142px; }
+    .heartbeat-top { display:flex; align-items:center; gap:6px; font-size:9px; font-weight:850; text-transform:uppercase; letter-spacing:.06em; }
+    .heartbeat-meta { margin-top:2px; color:var(--muted); font:8.5px ui-monospace,monospace; }
+    .pulse { width:8px; height:8px; border-radius:50%; background:#9aa4a9; box-shadow:0 0 0 3px #e8ecee; }
+    .heartbeat.ok .pulse { background:var(--green); box-shadow:0 0 0 3px #dcefe7; animation:pulse 2s infinite; }
+    .heartbeat.stale .pulse,.heartbeat.degraded .pulse { background:var(--red); box-shadow:0 0 0 3px #f5dedb; animation:none; }
+    @keyframes pulse { 50% { box-shadow:0 0 0 5px rgba(15,107,85,.08); } }
     main { padding:13px clamp(16px,3vw,42px) 32px; max-width:1800px; margin:auto; }
     .stats { display:grid; grid-template-columns:repeat(5,minmax(105px,1fr)); gap:8px; margin-bottom:10px; }
     .stat,.panel { background:var(--card); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 24px rgba(42,53,48,.045); }
@@ -22,11 +30,19 @@
     .stat span { color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-size:9px; font-weight:800; }
     .stat strong { font:750 20px/1 Georgia,serif; }
     .layout { display:grid; grid-template-columns:minmax(270px,315px) minmax(0,1fr); gap:10px; align-items:start; }
+    .rail { display:grid; gap:10px; min-width:0; }
     .panel { overflow:hidden; } .panel-head { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .panel-head h2 { margin:0; font-size:12px; }
     .controls { padding:8px; border-bottom:1px solid var(--line); display:grid; grid-template-columns:1fr 100px; gap:6px; }
     .controls input,.controls select { min-width:0; width:100%; border:1px solid #c9c4b8; border-radius:7px; padding:7px 8px; color:var(--ink); background:#fff; font-size:11px; }
     .trace-list { max-height:calc(100vh - 242px); min-height:260px; overflow:auto; }
+    .activity-list { max-height:154px; overflow:auto; background:#10181d; color:#dbe7e1; }
+    button.activity-row { width:100%; display:grid; grid-template-columns:56px 1fr auto; gap:7px; align-items:start; border:0; border-bottom:1px solid #26343b; padding:7px 9px; background:transparent; color:inherit; text-align:left; cursor:pointer; }
+    button.activity-row:hover { background:#1a272d; }
+    .activity-source { color:#75bca4; font:8px ui-monospace,monospace; text-transform:uppercase; }
+    .activity-copy b { display:block; font-size:9.5px; } .activity-copy span { display:block; margin-top:2px; color:#9babb3; font:8.5px ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .activity-time { color:#82939b; font:8px ui-monospace,monospace; white-space:nowrap; }
+    .expand { border:0; background:transparent; color:var(--blue); font-size:9px; font-weight:800; cursor:pointer; }
     button.trace { width:100%; border:0; border-bottom:1px solid var(--line); background:transparent; padding:9px 11px; text-align:left; cursor:pointer; color:inherit; }
     button.trace:hover,button.trace.active { background:#edf4ef; } button.trace.active { box-shadow:inset 3px 0 var(--green); }
     .trace-top { display:flex; justify-content:space-between; gap:7px; font-size:11px; font-weight:780; }
@@ -52,6 +68,15 @@
     .timeline button { border:1px solid var(--line); border-left:3px solid var(--blue); border-radius:6px; background:#fafbf9; padding:6px 7px; text-align:left; cursor:pointer; }
     .timeline button:hover { background:#edf4ef; } .timeline b { display:block; font-size:10px; } .timeline span { color:var(--muted); font-size:9px; }
     .inspector { position:fixed; inset:0; z-index:10; background:rgba(23,32,38,.35); display:flex; justify-content:flex-end; } .inspector[hidden] { display:none; }
+    .log-overlay { position:fixed; inset:0; z-index:11; background:rgba(13,20,24,.66); display:grid; place-items:center; padding:28px; } .log-overlay[hidden] { display:none; }
+    .log-console { width:min(1050px,96vw); height:min(720px,88vh); display:flex; flex-direction:column; background:#10181d; color:#dbe7e1; border:1px solid #40525b; border-radius:12px; box-shadow:0 24px 80px rgba(0,0,0,.4); overflow:hidden; }
+    .log-console-head { padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:12px; border-bottom:1px solid #304047; }
+    .log-console-head h2 { margin:2px 0 0; font:750 20px Georgia,serif; color:#fff; }
+    .log-tools { display:flex; gap:7px; align-items:center; }
+    .log-tools input { width:min(300px,38vw); border:1px solid #485b64; border-radius:7px; background:#172329; color:#fff; padding:6px 8px; }
+    .log-tools .close { background:#1d2b31; color:#fff; border-color:#485b64; }
+    .log-expanded-list { flex:1; overflow:auto; }
+    .log-expanded-list button.activity-row { grid-template-columns:85px 1fr 150px; padding:9px 13px; }
     .drawer { width:min(470px,92vw); height:100%; overflow:auto; background:var(--card); box-shadow:-16px 0 50px rgba(23,32,38,.2); padding:16px; }
     .drawer-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--line); }
     .drawer h2 { margin:2px 0 0; font:750 20px Georgia,serif; } .close { border:1px solid var(--line); background:#fff; border-radius:7px; padding:5px 9px; cursor:pointer; }
@@ -60,31 +85,39 @@
     .kv dd { background:#fff; font:10.5px/1.4 ui-monospace,monospace; } .kv dt:last-of-type,.kv dd:last-of-type { border-bottom:0; }
     @media(max-width:1050px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.section.wide{grid-column:span 2}.stats{grid-template-columns:repeat(5,minmax(80px,1fr))} }
     @media(max-width:800px){ header{position:static}.layout{grid-template-columns:1fr}.trace-list{max-height:260px}.stats{grid-template-columns:repeat(3,1fr)} }
-    @media(max-width:560px){ .brand{align-items:flex-start;flex-direction:column}.grid{grid-template-columns:1fr}.section.wide{grid-column:auto}.stats{grid-template-columns:1fr 1fr}.controls{grid-template-columns:1fr}.source{grid-template-columns:1fr}.kv{grid-template-columns:95px 1fr} }
+    @media(max-width:560px){ .brand{align-items:flex-start;flex-direction:column}.status-stack{justify-content:flex-start}.grid{grid-template-columns:1fr}.section.wide{grid-column:auto}.stats{grid-template-columns:1fr 1fr}.controls{grid-template-columns:1fr}.source{grid-template-columns:1fr}.kv{grid-template-columns:95px 1fr}.log-overlay{padding:8px}.log-console{height:94vh}.log-tools input{width:44vw}.log-expanded-list button.activity-row{grid-template-columns:58px 1fr} }
   </style>
 </head>
 <body>
-  <header><div class="brand"><div><div class="eyebrow">Autonomous options agent / decision audit</div><h1>Taygos818's Alpaca Hackathon Dashboard</h1><div class="subtitle">Trace evidence, independent agent findings, deterministic risk vetoes, paper orders, positions, and exits. Select any record for the complete redacted decision trail.</div></div><div class="paper-pill">PAPER ACCOUNT ONLY · READ ONLY</div></div></header>
+  <header><div class="brand"><div><div class="eyebrow">Autonomous options agent / decision audit</div><h1>Taygos818's Alpaca Hackathon Dashboard</h1><div class="subtitle">Trace evidence, independent agent findings, deterministic risk vetoes, paper orders, positions, and exits. Select any record for the complete redacted decision trail.</div></div><div class="status-stack"><div class="heartbeat unknown" id="heartbeatMonitor" role="status" aria-live="polite"><div class="heartbeat-top"><span class="pulse"></span><span id="heartbeatLabel">Heartbeat checking</span></div><div class="heartbeat-meta" id="heartbeatMeta">waiting for health data</div></div><div class="paper-pill">PAPER ACCOUNT ONLY · READ ONLY</div></div></div></header>
   <main>
     <div class="stats">
       <div class="stat"><span>Traces</span><strong id="traceCount">0</strong></div><div class="stat"><span>Proposals</span><strong id="proposalCount">0</strong></div><div class="stat"><span>Risk rejects</span><strong id="rejectCount">0</strong></div><div class="stat"><span>Orders</span><strong id="orderCount">0</strong></div><div class="stat"><span>Positions</span><strong id="positionCount">0</strong></div>
     </div>
     <div class="layout">
-      <aside class="panel"><div class="panel-head"><h2>Decision traces</h2><span class="badge" id="loadState">loading</span></div><div class="controls"><input id="traceSearch" type="search" aria-label="Search decision traces" placeholder="Search trace, symbol, strategy…"><select id="outcomeFilter" aria-label="Filter by outcome"><option value="">All outcomes</option></select></div><div class="trace-list" id="traceList"></div></aside>
+      <div class="rail"><aside class="panel"><div class="panel-head"><h2>Decision traces</h2><span class="badge" id="loadState">loading</span></div><div class="controls"><input id="traceSearch" type="search" aria-label="Search decision traces" placeholder="Search trace, symbol, strategy…"><select id="outcomeFilter" aria-label="Filter by outcome"><option value="">All outcomes</option></select></div><div class="trace-list" id="traceList"></div></aside><section class="panel"><div class="panel-head"><h2>Activity logs</h2><button class="expand" id="expandLogs" type="button">Expand ↗</button></div><div class="activity-list" id="activityList"><div class="copy" style="padding:10px">Loading activity…</div></div></section></div>
       <section class="panel"><div class="detail" id="detail"><div class="empty"><div><strong>No decision selected</strong>Select a persisted trace to reconstruct the workflow.</div></div></div></section>
     </div>
   </main>
   <div class="inspector" id="inspector" hidden aria-hidden="true"><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle"><div class="drawer-head"><div><div class="eyebrow" id="inspectorKind">Record detail</div><h2 id="inspectorTitle">Detail</h2></div><button class="close" id="closeInspector" type="button" aria-label="Close detail panel">Close</button></div><dl class="kv" id="inspectorBody"></dl></aside></div>
+  <div class="log-overlay" id="logOverlay" hidden aria-hidden="true"><section class="log-console" role="dialog" aria-modal="true" aria-labelledby="logTitle"><div class="log-console-head"><div><div class="eyebrow">Redacted paper lifecycle</div><h2 id="logTitle">Activity logs</h2></div><div class="log-tools"><input id="logSearch" type="search" aria-label="Search activity logs" placeholder="Filter source, status, trace…"><button class="close" id="closeLogs" type="button">Close</button></div></div><div class="log-expanded-list" id="expandedActivityList"></div></section></div>
   <script>
     const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     const badge=v=>`<span class="badge ${esc(v)}">${esc(String(v||'unknown').replaceAll('_',' '))}</span>`;
     const money=v=>v===undefined||v===null||v===''?'—':`$${Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
     const label=k=>String(k).replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
-    let records=[],filtered=[],selectedTrace='';
+    let records=[],filtered=[],selectedTrace='',activityRecords=[];
     function formatValue(v){if(v===null||v===undefined||v==='')return '—';if(Array.isArray(v))return v.length?v.map(x=>typeof x==='object'?JSON.stringify(x):x).join('\n'):'None';if(typeof v==='object')return Object.entries(v).map(([k,x])=>`${label(k)}: ${typeof x==='object'?JSON.stringify(x):x}`).join('\n');return String(v);}
     function inspect(kind,title,data){document.getElementById('inspectorKind').textContent=kind;document.getElementById('inspectorTitle').textContent=title;document.getElementById('inspectorBody').innerHTML=Object.entries(data||{}).map(([k,v])=>`<dt>${esc(label(k))}</dt><dd>${esc(formatValue(v))}</dd>`).join('')||'<dt>Status</dt><dd>No additional fields recorded.</dd>';const el=document.getElementById('inspector');el.hidden=false;el.setAttribute('aria-hidden','false');document.getElementById('closeInspector').focus();}
     function closeInspector(){const el=document.getElementById('inspector');el.hidden=true;el.setAttribute('aria-hidden','true');}
     document.getElementById('closeInspector').onclick=closeInspector;document.getElementById('inspector').onclick=e=>{if(e.target.id==='inspector')closeInspector();};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeInspector();});
+    const shortTime=v=>{if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?String(v).slice(11,19):d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+    function activityRows(values,expanded=false){const shortSource={reconciliation:'reconcile',submission:'submit'};return values.length?values.map((r,i)=>`<button type="button" class="activity-row" data-activity="${i}"><span class="activity-source">${esc(expanded?r.source:(shortSource[r.source]||r.source))}</span><span class="activity-copy"><b>${esc(r.title)}</b><span>${esc(r.detail)}</span></span><span class="activity-time">${esc(shortTime(r.timestamp))}</span></button>`).join(''):'<div class="copy" style="padding:12px;color:#9babb3">No lifecycle activity has been recorded yet.</div>';}
+    function filteredActivity(){const q=document.getElementById('logSearch').value.trim().toLowerCase();return q?activityRecords.filter(r=>[r.source,r.title,r.detail,r.timestamp].join(' ').toLowerCase().includes(q)):activityRecords;}
+    function renderActivity(){const compact=activityRecords.slice(0,5),list=document.getElementById('activityList');list.innerHTML=activityRows(compact);list.querySelectorAll('button').forEach(b=>b.onclick=openLogs);const expanded=filteredActivity(),full=document.getElementById('expandedActivityList');full.innerHTML=activityRows(expanded,true);full.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>{closeLogs();inspect('Activity log',expanded[i].title,expanded[i]);});}
+    function openLogs(){const el=document.getElementById('logOverlay');el.hidden=false;el.setAttribute('aria-hidden','false');renderActivity();document.getElementById('logSearch').focus();}
+    function closeLogs(){const el=document.getElementById('logOverlay');el.hidden=true;el.setAttribute('aria-hidden','true');}
+    document.getElementById('expandLogs').onclick=openLogs;document.getElementById('closeLogs').onclick=closeLogs;document.getElementById('logOverlay').onclick=e=>{if(e.target.id==='logOverlay')closeLogs();};document.getElementById('logSearch').addEventListener('input',renderActivity);document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLogs();});
     function wireDrills(root){root.querySelectorAll('[data-drill]').forEach(b=>b.onclick=()=>{const [group,index]=b.dataset.drill.split(':');const r=records.find(x=>x.trace_id===selectedTrace);const maps={agent:r?.agents,proposal:r?.proposals,risk:r?.risk_decisions,order:r?.orders,position:r?.positions,source:r?.provenance,ranking:r?.opportunity_rankings};const value=group==='decision'?r:maps[group]?.[Number(index)];inspect(label(group),b.dataset.title||label(group),value);});}
     function items(values,group,fn,empty='None recorded'){return values?.length?values.map((v,i)=>`<button type="button" class="drill" data-drill="${group}:${i}" data-title="${esc(v.name||v.underlying||v.key||v.provider||v.reason||v.status||label(group))}">${fn(v)}</button>`).join(''):`<div class="copy">${empty}</div>`;}
     function traceHaystack(r){return [r.trace_id,r.phase,r.outcome,...(r.proposals||[]).flatMap(p=>[p.underlying,p.strategy,p.direction]),...(r.agents||[]).flatMap(a=>[a.name,a.direction,a.thesis])].join(' ').toLowerCase();}
@@ -104,7 +137,9 @@
       const detail=document.getElementById('detail');detail.innerHTML=`<div class="decision-head"><div><h2>${esc(r.proposals[0]?.underlying||'Abstention / no proposal')}</h2><div class="mono">${esc(r.trace_id)} · ${esc(r.recorded_at||'time unavailable')}<br>${esc(r.fingerprint)}</div></div><div>${badge(r.phase)} ${badge(r.outcome)}</div></div><div class="grid"><div class="section wide"><h3>Transaction and decision trace</h3><div class="timeline">${timelineHtml}</div></div><div class="section"><h3>Opportunity ranking</h3>${rankings}</div><div class="section"><h3>Independent agents</h3>${agents}</div><div class="section"><h3>Chosen structures</h3>${proposals}</div><div class="section"><h3>Deterministic risk</h3>${risks}</div><div class="section"><h3>Paper orders</h3>${orders}</div><div class="section"><h3>Positions and exits</h3>${positions}</div><div class="section wide"><h3>Evidence provenance</h3>${sources}</div></div>`;wireDrills(detail);
     }
     async function load(){try{const res=await fetch('/api/agent-decisions');const data=await res.json();records=data.records||[];document.getElementById('loadState').textContent='read only';document.getElementById('traceCount').textContent=records.length;document.getElementById('proposalCount').textContent=records.reduce((n,r)=>n+r.proposals.length,0);document.getElementById('rejectCount').textContent=records.reduce((n,r)=>n+r.rejections.length,0);document.getElementById('orderCount').textContent=records.reduce((n,r)=>n+r.orders.length,0);document.getElementById('positionCount').textContent=records.reduce((n,r)=>n+r.positions.length,0);const filter=document.getElementById('outcomeFilter'),current=filter.value,outcomes=[...new Set(records.map(r=>r.outcome).filter(Boolean))].sort();filter.innerHTML='<option value="">All outcomes</option>'+outcomes.map(x=>`<option value="${esc(x)}">${esc(x.replaceAll('_',' '))}</option>`).join('');filter.value=outcomes.includes(current)?current:'';applyFilters();}catch(_e){document.getElementById('loadState').textContent='unavailable';document.getElementById('traceList').innerHTML='<div class="empty"><div><strong>Trace data unavailable</strong>The dashboard did not substitute demo data.</div></div>';}}
-    document.getElementById('traceSearch').addEventListener('input',applyFilters);document.getElementById('outcomeFilter').addEventListener('change',applyFilters);load();setInterval(load,15000);
+    async function loadHealth(){const monitor=document.getElementById('heartbeatMonitor');try{const res=await fetch('/health');const data=await res.json(),state=data.strategy_engine_heartbeat||'unknown',age=data.strategy_engine_heartbeat_age_seconds;monitor.className=`heartbeat ${esc(state)}`;document.getElementById('heartbeatLabel').textContent=state==='ok'?'Engine heartbeat healthy':state==='stale'?'Engine heartbeat stale':'Heartbeat unknown';document.getElementById('heartbeatMeta').textContent=age===null||age===undefined?'age unavailable':`${Number(age).toFixed(1)}s old · checked live`;}catch(_e){monitor.className='heartbeat stale';document.getElementById('heartbeatLabel').textContent='Health endpoint unavailable';document.getElementById('heartbeatMeta').textContent='dashboard cannot verify engine';}}
+    async function loadActivity(){try{const res=await fetch('/api/agent-activity?limit=100');const data=await res.json();activityRecords=data.records||[];renderActivity();}catch(_e){document.getElementById('activityList').innerHTML='<div class="copy" style="padding:10px;color:#e8a29c">Activity feed unavailable.</div>';}}
+    document.getElementById('traceSearch').addEventListener('input',applyFilters);document.getElementById('outcomeFilter').addEventListener('change',applyFilters);load();loadHealth();loadActivity();setInterval(load,15000);setInterval(loadHealth,10000);setInterval(loadActivity,10000);
   </script>
 </body>
 </html>

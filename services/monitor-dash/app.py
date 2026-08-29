@@ -13,13 +13,17 @@ import redis
 import requests
 import pyotp
 import robin_stocks.robinhood as rh
-from flask import Flask, jsonify, Response, render_template
+from flask import Flask, jsonify, request, Response, render_template
 
 
 
 app = Flask(__name__, template_folder=str(Path(__file__).resolve().parent / "templates"))
 TRADE_LOG_PATH = Path(os.getenv("TRADE_LOG_PATH", "/app/logs/trades.jsonl"))
 DECISION_TRACE_PATH = Path(os.getenv("DECISION_TRACE_PATH", "/app/logs/decision-traces.jsonl"))
+SUBMISSION_LEDGER_PATH = Path(os.getenv("PAPER_SUBMISSION_LEDGER_PATH", "/app/logs/submissions.jsonl"))
+PENDING_ENTRY_PATH = Path(os.getenv("PENDING_ENTRY_PATH", "/app/logs/pending-entries.jsonl"))
+EXIT_ORDER_PATH = Path(os.getenv("EXIT_ORDER_PATH", "/app/logs/exit-orders.jsonl"))
+EXIT_PLAN_PATH = Path(os.getenv("EXIT_PLAN_PATH", "/app/logs/exit-plans.jsonl"))
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 TRADE_COUNTER = Counter()
@@ -127,17 +131,31 @@ def agent_dashboard():
 @app.get("/health")
 def health():
     engine_heartbeat = "unknown"
+    heartbeat_age_seconds = None
+    heartbeat_checked_at = None
     if REDIS_URL:
         try:
-            engine_heartbeat = redis.Redis.from_url(
+            client = redis.Redis.from_url(
                 REDIS_URL, decode_responses=True, socket_timeout=3
-            ).get("strategy_engine_heartbeat_status") or "unknown"
+            )
+            engine_heartbeat, raw_age, heartbeat_checked_at = client.mget(
+                "strategy_engine_heartbeat_status",
+                "strategy_engine_heartbeat_age_seconds",
+                "strategy_engine_heartbeat_checked_at",
+            )
+            engine_heartbeat = engine_heartbeat or "unknown"
+            if raw_age is not None:
+                parsed_age = float(raw_age)
+                if 0 <= parsed_age < 86400:
+                    heartbeat_age_seconds = round(parsed_age, 1)
         except Exception:
             pass
     return jsonify(
         {
             "status": "ok" if engine_heartbeat != "stale" else "degraded",
             "strategy_engine_heartbeat": engine_heartbeat,
+            "strategy_engine_heartbeat_age_seconds": heartbeat_age_seconds,
+            "strategy_engine_heartbeat_checked_at": heartbeat_checked_at,
             "trade_log_exists": TRADE_LOG_PATH.exists(),
             "decision_trace_exists": DECISION_TRACE_PATH.exists(),
             "postgres_configured": bool(POSTGRES_DSN),
@@ -413,6 +431,91 @@ def agent_decision(trace_id):
     if record is None:
         return jsonify({"status": "not_found"}), 404
     return jsonify({"status": "ok", "record": public_decision_record(record)})
+
+
+def _jsonl_tail(path: Path, limit: int = 100):
+    if not path.exists():
+        return []
+    rows = deque(maxlen=limit)
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    item = json.loads(line)
+                    if isinstance(item, dict):
+                        rows.append(item)
+    except (OSError, json.JSONDecodeError):
+        return []
+    return list(rows)
+
+
+def load_agent_activity(limit: int = 100):
+    activity = []
+    for item in _jsonl_tail(DECISION_TRACE_PATH, limit):
+        trace = item.get("trace") if isinstance(item.get("trace"), dict) else {}
+        proposals = trace.get("proposals") if isinstance(trace.get("proposals"), list) else []
+        symbol = next((row.get("underlying") for row in proposals if isinstance(row, dict)), None)
+        activity.append(
+            {
+                "timestamp": item.get("recorded_at"),
+                "source": "decision",
+                "severity": "warning" if item.get("outcome") in {"no_authorized_trade", "rejected"} else "info",
+                "title": f"{symbol or 'Agent'} · {str(item.get('outcome') or 'decision').replace('_', ' ')}",
+                "detail": str(item.get("trace_id") or "trace unavailable")[:128],
+            }
+        )
+    for item in _jsonl_tail(SUBMISSION_LEDGER_PATH, limit):
+        activity.append(
+            {
+                "timestamp": item.get("submitted_at"),
+                "source": "submission",
+                "severity": "success",
+                "title": f"{str(item.get('kind') or 'paper').title()} order submitted",
+                "detail": str(item.get("client_order_id") or "client order unavailable")[:128],
+            }
+        )
+    for item in _jsonl_tail(PENDING_ENTRY_PATH, limit):
+        activity.append(
+            {
+                "timestamp": item.get("broker_timestamp"),
+                "source": "reconciliation",
+                "severity": "success" if item.get("status") == "filled" else "info",
+                "title": f"Entry · {str(item.get('status') or 'pending').replace('_', ' ')}",
+                "detail": f"filled {int(item.get('filled_quantity') or 0)} · {str(item.get('client_order_id') or '')[:96]}",
+            }
+        )
+    for item in _jsonl_tail(EXIT_ORDER_PATH, limit):
+        activity.append(
+            {
+                "timestamp": item.get("broker_timestamp"),
+                "source": "exit",
+                "severity": "success" if item.get("status") == "filled" else "warning",
+                "title": f"Exit · {str(item.get('status') or 'pending').replace('_', ' ')}",
+                "detail": str(item.get("plan_id") or "exit plan unavailable")[:128],
+            }
+        )
+    for item in _jsonl_tail(EXIT_PLAN_PATH, limit):
+        activity.append(
+            {
+                "timestamp": item.get("opened_at"),
+                "source": "position",
+                "severity": "info",
+                "title": f"{str(item.get('underlying') or 'Option')} · exit plan {str(item.get('state') or 'active')}",
+                "detail": str(item.get("plan_id") or "exit plan unavailable")[:128],
+            }
+        )
+    activity.sort(key=lambda row: str(row.get("timestamp") or ""), reverse=True)
+    return activity[:limit]
+
+
+@app.get("/api/agent-activity")
+def agent_activity():
+    try:
+        limit = min(200, max(10, int(request.args.get("limit", "100"))))
+    except ValueError:
+        limit = 100
+    records = load_agent_activity(limit)
+    return jsonify({"status": "ok", "count": len(records), "records": records})
 
 
 def compute_fifo_trades(trades_list):

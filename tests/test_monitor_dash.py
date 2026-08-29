@@ -24,6 +24,10 @@ class MonitorDashTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.temp_dir = tempfile.TemporaryDirectory()
         monitor_dash.DECISION_TRACE_PATH = Path(self.temp_dir.name) / "decision-traces.jsonl"
+        monitor_dash.SUBMISSION_LEDGER_PATH = Path(self.temp_dir.name) / "submissions.jsonl"
+        monitor_dash.PENDING_ENTRY_PATH = Path(self.temp_dir.name) / "pending-entries.jsonl"
+        monitor_dash.EXIT_ORDER_PATH = Path(self.temp_dir.name) / "exit-orders.jsonl"
+        monitor_dash.EXIT_PLAN_PATH = Path(self.temp_dir.name) / "exit-plans.jsonl"
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -152,9 +156,57 @@ class MonitorDashTests(unittest.TestCase):
         self.assertIn(b'id="traceSearch"', response.data)
         self.assertIn(b'id="outcomeFilter"', response.data)
         self.assertIn(b'id="inspector"', response.data)
+        self.assertIn(b'id="heartbeatMonitor"', response.data)
+        self.assertIn(b'id="activityList"', response.data)
+        self.assertIn(b'id="logOverlay"', response.data)
         self.assertIn(b"PAPER ACCOUNT ONLY", response.data)
         payload = self.client.get("/api/agent-decisions").get_json()
         self.assertEqual(payload, {"status": "ok", "count": 0, "records": []})
+
+    def test_health_exposes_heartbeat_without_internal_redis_details(self):
+        from unittest.mock import MagicMock, patch
+
+        client = MagicMock()
+        client.mget.return_value = ["ok", "2.4", "1787960000"]
+        with patch.object(monitor_dash, "REDIS_URL", "redis://test"), \
+             patch.object(monitor_dash.redis.Redis, "from_url", return_value=client):
+            response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["strategy_engine_heartbeat"], "ok")
+        self.assertEqual(body["strategy_engine_heartbeat_age_seconds"], 2.4)
+        self.assertNotIn("redis", response.data.decode("utf-8").lower())
+
+    def test_activity_api_summarizes_lifecycle_logs_without_raw_payloads(self):
+        monitor_dash.SUBMISSION_LEDGER_PATH.write_text(
+            json.dumps({
+                "client_order_id": "agent.safe-client-id",
+                "kind": "entry",
+                "submitted_at": "2026-08-31T13:31:00+00:00",
+                "trading_date": "2026-08-31",
+                "alpaca_secret_key": "never-return-this",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        monitor_dash.PENDING_ENTRY_PATH.write_text(
+            json.dumps({
+                "client_order_id": "agent.safe-client-id",
+                "broker_order_id": "sensitive-broker-id",
+                "status": "filled",
+                "filled_quantity": 2,
+                "broker_timestamp": "2026-08-31T13:31:02+00:00",
+                "proposal": {"raw": "not-for-dashboard"},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        response = self.client.get("/api/agent-activity?limit=25")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["count"], 2)
+        encoded = response.data.decode("utf-8")
+        self.assertNotIn("never-return-this", encoded)
+        self.assertNotIn("sensitive-broker-id", encoded)
+        self.assertNotIn("not-for-dashboard", encoded)
 
 
 if __name__ == "__main__":

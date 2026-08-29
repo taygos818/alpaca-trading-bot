@@ -158,6 +158,10 @@ services:
     environment:
       DECISION_TRACE_PATH: /app/logs/decision-traces.jsonl
       TRADE_LOG_PATH: /app/logs/trades.jsonl
+      PAPER_SUBMISSION_LEDGER_PATH: /app/logs/submissions.jsonl
+      PENDING_ENTRY_PATH: /app/logs/pending-entries.jsonl
+      EXIT_ORDER_PATH: /app/logs/exit-orders.jsonl
+      EXIT_PLAN_PATH: /app/logs/exit-plans.jsonl
       ACTIVE_BROKER: alpaca
       ALPACA_PAPER_TRADE: "true"
       TRADING_LANE: options_paper
