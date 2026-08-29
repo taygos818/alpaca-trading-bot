@@ -27,6 +27,7 @@ OPEN_STATUSES = {"new", "accepted", "pending_new", "partially_filled", "pending_
 @dataclass(frozen=True, slots=True)
 class PaperLaunchPolicy:
     submission_enabled: bool = False
+    entry_submission_enabled: bool = True
     dry_run: bool = True
     bounded_ack: str = ""
     max_submissions_per_day: int = 30
@@ -48,6 +49,7 @@ class PaperLaunchPolicy:
         enabled = _flag("PAPER_ORDER_SUBMISSION_ENABLED", False)
         return cls(
             submission_enabled=enabled,
+            entry_submission_enabled=_flag("PAPER_ENTRY_SUBMISSION_ENABLED", enabled),
             dry_run=_flag("PAPER_ORDER_DRY_RUN", True),
             bounded_ack=os.getenv("M6_BOUNDED_SUBMISSION_ACK", "").strip(),
             max_submissions_per_day=int(os.getenv("PAPER_MAX_SUBMISSIONS_PER_DAY", "30")),
@@ -146,7 +148,7 @@ class BoundedPaperLauncher:
             raise BrokerStateUnresolved("maximum open-order count reached")
 
         preview = self.gateway.preview(execution)
-        if not self.policy.submission_enabled:
+        if not self.policy.submission_enabled or not self.policy.entry_submission_enabled:
             return LaunchResult("dry_run", preview, None)
         now = datetime.now(timezone.utc)
         self._check_daily_limit(now)

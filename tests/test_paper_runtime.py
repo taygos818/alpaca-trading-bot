@@ -50,7 +50,7 @@ from paper_runtime import (  # noqa: E402
     PendingEntryStore,
     ReplayScenario,
 )
-from defined_risk_options import JsonlExitPlanStore  # noqa: E402
+from defined_risk_options import ExitCommandFactory, ExitDecisionEngine, ExitPlanFactory, JsonlExitPlanStore  # noqa: E402
 
 
 NOW = datetime(2026, 8, 28, 16, 0, tzinfo=timezone.utc)
@@ -278,6 +278,34 @@ def test_daily_submission_limit_is_restart_safe_and_rejects_excess_risk(tmp_path
     too_small = replace(policy, max_authorized_loss_usd=Decimal("99"))
     with pytest.raises(BrokerStateUnresolved, match="loss limit"):
         BoundedPaperLauncher(FakeGateway(), too_small).launch(execution)
+
+
+def test_entry_pause_keeps_position_reducing_exit_submission_enabled():
+    execution, _ = execution_and_trace()
+    policy = PaperLaunchPolicy(
+        submission_enabled=True,
+        entry_submission_enabled=False,
+        dry_run=False,
+        bounded_ack="paper-contest",
+    )
+    gateway = FakeGateway()
+    launcher = BoundedPaperLauncher(gateway, policy)
+    assert launcher.launch(execution).mode == "dry_run"
+    plan = ExitPlanFactory().for_filled_proposal(
+        execution.proposal,
+        filled_quantity=1,
+        entry_debit=Decimal("1.00"),
+        opened_at=NOW,
+        thesis_evidence_ids=("evidence.bar",),
+    )
+    decision = ExitDecisionEngine().assess(
+        plan,
+        current_mark=Decimal("1.60"),
+        now=NOW + timedelta(minutes=5),
+        thesis_valid=True,
+    )
+    command = ExitCommandFactory().for_due_plan(plan, decision, NOW + timedelta(minutes=5))
+    assert launcher.launch_exit(command).mode == "submitted"
 
 
 def test_partial_fill_reconciliation_is_typed_and_restart_safe():

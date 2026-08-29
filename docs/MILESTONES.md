@@ -62,9 +62,9 @@ Competition launch profile (August 31 through September 3, 2026): discovery retr
 and entry throughput is bounded by daily submissions, open orders, defined maximum loss,
 portfolio exposure, and daily drawdown. Exit orders are never blocked by the entry-count fuse.
 
-Rollback: set `PAPER_ORDER_SUBMISSION_ENABLED=false` and `PAPER_ORDER_DRY_RUN=true`, rebuild
-the strategy engine, and leave reconciliation plus deterministic exits running for any
-existing paper positions.
+Rollback: set `PAPER_ENTRY_SUBMISSION_ENABLED=false`, rebuild the strategy engine, and
+leave `PAPER_ORDER_SUBMISSION_ENABLED=true` so reconciliation plus deterministic exits
+remain active for existing paper positions.
 
 ## Milestone 7 — Dashboard and explainability
 
