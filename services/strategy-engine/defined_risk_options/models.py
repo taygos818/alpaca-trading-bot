@@ -207,6 +207,22 @@ class DefinedRiskOptionsConfig:
         return cls(
             enabled=os.getenv("DEFINED_RISK_OPTIONS_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"},
             required_feed=os.getenv("OPTIONS_MARKET_DATA_FEED", "indicative").strip().lower(),
+            min_dte=int(os.getenv("OPTIONS_MIN_DTE", "7")),
+            max_dte=int(os.getenv("OPTIONS_MAX_DTE", "21")),
+            exit_before_expiration_days=int(os.getenv("OPTIONS_EXIT_BEFORE_EXPIRATION_DAYS", "2")),
+            max_contracts=int(os.getenv("OPTIONS_MAX_CONTRACTS", "10")),
+            max_trade_risk_pct=Decimal(os.getenv("OPTIONS_MAX_TRADE_RISK_PCT", "0.05")),
+            max_total_risk_pct=Decimal(os.getenv("OPTIONS_MAX_TOTAL_RISK_PCT", "0.50")),
+            max_underlying_risk_pct=Decimal(os.getenv("OPTIONS_MAX_UNDERLYING_RISK_PCT", "0.15")),
+            max_correlation_risk_pct=Decimal(os.getenv("OPTIONS_MAX_CORRELATION_RISK_PCT", "0.40")),
+            min_cash_buffer_pct=Decimal(os.getenv("OPTIONS_MIN_CASH_BUFFER_PCT", "0.05")),
+            daily_loss_limit_pct=Decimal(os.getenv("OPTIONS_DAILY_LOSS_LIMIT_PCT", "0.12")),
+            max_open_positions=int(os.getenv("OPTIONS_MAX_OPEN_POSITIONS", "10")),
+            max_pending_orders=int(os.getenv("OPTIONS_MAX_PENDING_ORDERS", "8")),
+            min_analysis_confidence=Decimal(os.getenv("OPTIONS_MIN_ANALYSIS_CONFIDENCE", "0.55")),
+            profit_target_pct=Decimal(os.getenv("OPTIONS_PROFIT_TARGET_PCT", "0.25")),
+            loss_limit_pct=Decimal(os.getenv("OPTIONS_LOSS_LIMIT_PCT", "0.30")),
+            max_holding_days=int(os.getenv("OPTIONS_MAX_HOLDING_DAYS", "1")),
         )
 
 

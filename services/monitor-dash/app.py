@@ -126,9 +126,18 @@ def agent_dashboard():
 
 @app.get("/health")
 def health():
+    engine_heartbeat = "unknown"
+    if REDIS_URL:
+        try:
+            engine_heartbeat = redis.Redis.from_url(
+                REDIS_URL, decode_responses=True, socket_timeout=3
+            ).get("strategy_engine_heartbeat_status") or "unknown"
+        except Exception:
+            pass
     return jsonify(
         {
-            "status": "ok",
+            "status": "ok" if engine_heartbeat != "stale" else "degraded",
+            "strategy_engine_heartbeat": engine_heartbeat,
             "trade_log_exists": TRADE_LOG_PATH.exists(),
             "decision_trace_exists": DECISION_TRACE_PATH.exists(),
             "postgres_configured": bool(POSTGRES_DSN),

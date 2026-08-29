@@ -27,11 +27,13 @@ class PaperAgentCycleRunner:
         launcher: BoundedPaperLauncher,
         journal: DecisionTraceJournal,
         exit_plan_store: JsonlExitPlanStore | None = None,
+        pending_entry_store=None,
     ) -> None:
         self.coordinator = coordinator
         self.launcher = launcher
         self.journal = journal
         self.exit_plan_store = exit_plan_store
+        self.pending_entry_store = pending_entry_store
         self.exit_plan_factory = ExitPlanFactory()
         self.position_agent = PositionAnalysisAgent()
 
@@ -58,12 +60,19 @@ class PaperAgentCycleRunner:
         for execution in result.authorized_executions:
             launch = self.launcher.launch(execution)
             launches.append(launch)
-            if launch.mode != "submitted":
+            if launch.mode not in {"submitted", "duplicate"} or launch.snapshot is None:
                 continue
             snapshot, event = self.launcher.reconcile(execution)
             events.append(event)
+            if self.pending_entry_store is not None and self.exit_plan_store is not None:
+                self.pending_entry_store.track(
+                    execution,
+                    tuple(item.record_id for item in evidence),
+                    snapshot,
+                    self.exit_plan_store,
+                )
             if event.filled_quantity:
-                if self.exit_plan_store is not None:
+                if self.exit_plan_store is not None and self.pending_entry_store is None:
                     self.exit_plan_store.save(
                         self.exit_plan_factory.for_filled_proposal(
                             execution.proposal,
@@ -100,8 +109,10 @@ class PaperAgentCycleRunner:
         )
         submitted = sum(1 for item in launches if item.mode == "submitted")
         dry_runs = sum(1 for item in launches if item.mode == "dry_run")
-        phase = "broker_reconciled" if submitted else "preview"
-        outcome = "submitted" if submitted else ("dry_run" if dry_runs else "no_authorized_trade")
+        phase = "broker_reconciled" if events else "preview"
+        outcome = "submitted" if submitted else (
+            "reconciled_duplicate" if events else ("dry_run" if dry_runs else "no_authorized_trade")
+        )
         metadata = {
             "proposal_count": len(result.proposals),
             "rejection_reasons": [

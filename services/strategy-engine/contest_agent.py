@@ -42,7 +42,17 @@ from multi_agent import (
     PortfolioRiskAgent,
     PortfolioSnapshot,
 )
-from paper_runtime import BoundedPaperLauncher, DecisionTraceJournal, PaperAgentCycleRunner, PaperLaunchPolicy
+from paper_runtime import (
+    BoundedPaperLauncher,
+    CompetitionPositionLifecycle,
+    DecisionTraceJournal,
+    ExitOrderStore,
+    JsonlSubmissionLedger,
+    PaperAgentCycleRunner,
+    PaperLaunchPolicy,
+    PendingEntryStore,
+)
+from utils.heartbeat import HeartbeatWriter
 from utils.data_feed import DataFeedUnavailable, build_market_snapshot_provider
 from utils.market_discovery import load_current_shortlist
 
@@ -97,9 +107,20 @@ class ContestPaperAgent:
             self._credentials,
             policy=GatewayPolicy(shadow_mode=not submission, submission_enabled=submission),
         )
-        self.launcher = BoundedPaperLauncher(self.gateway, PaperLaunchPolicy.from_env())
+        self.launcher = BoundedPaperLauncher(
+            self.gateway,
+            PaperLaunchPolicy.from_env(),
+            JsonlSubmissionLedger(os.getenv("PAPER_SUBMISSION_LEDGER_PATH", "")),
+        )
         self.journal = DecisionTraceJournal(os.getenv("DECISION_TRACE_PATH", "/app/logs/decision-traces.jsonl"))
         self.exit_plans = JsonlExitPlanStore(os.getenv("EXIT_PLAN_PATH", "/app/logs/exit-plans.jsonl"))
+        self.pending_entries = PendingEntryStore(os.getenv("PENDING_ENTRY_PATH", "/app/logs/pending-entries.jsonl"))
+        self.lifecycle = CompetitionPositionLifecycle(
+            self.launcher,
+            self.exit_plans,
+            self.pending_entries,
+            ExitOrderStore(os.getenv("EXIT_ORDER_PATH", "/app/logs/exit-orders.jsonl")),
+        )
 
     @staticmethod
     def _credentials() -> PaperCredentials:
@@ -117,9 +138,21 @@ class ContestPaperAgent:
         if not isinstance(clock, dict) or not clock.get("is_open"):
             LOGGER.info("Market is closed; preserving reconciliation state without creating entries")
             return ()
+        positions = _list_payload(self.gateway.positions().payload, "positions")
+        reconciled = self.lifecycle.reconcile_entries()
+        exits = self.lifecycle.manage_exits(positions, timestamp)
+        if reconciled or exits:
+            LOGGER.info("Lifecycle reconciliation entries=%d exits=%d", len(reconciled), len(exits))
+        entry_start = os.getenv("COMPETITION_ENTRY_START_AT", "").strip()
+        entry_cutoff = os.getenv("COMPETITION_ENTRY_CUTOFF_AT", "").strip()
+        if entry_start and timestamp < datetime.fromisoformat(entry_start).astimezone(timezone.utc):
+            LOGGER.info("Competition entry window has not opened")
+            return ()
+        if entry_cutoff and timestamp >= datetime.fromisoformat(entry_cutoff).astimezone(timezone.utc):
+            LOGGER.info("Competition entry cutoff reached; exits remain active")
+            return ()
         shortlist = load_current_shortlist(os.getenv("DISCOVERY_OUTPUT_PATH", "/app/paper-data/market-shortlist.json"), now=timestamp)
         account = self.gateway.account().payload
-        positions = _list_payload(self.gateway.positions().payload, "positions")
         open_orders = _list_payload(self.gateway.open_orders().payload, "orders")
         risk_state, portfolio = self._portfolio(account, positions, open_orders)
         maximum = int(os.getenv("M6_MAX_CANDIDATES_PER_CYCLE", "5"))
@@ -170,6 +203,7 @@ class ContestPaperAgent:
                     self.launcher,
                     self.journal,
                     exit_plan_store=self.exit_plans,
+                    pending_entry_store=self.pending_entries,
                 ).run_cycle(
                     trace_id=trace_id,
                     evidence=evidence,
@@ -252,15 +286,20 @@ class ContestPaperAgent:
 
 def main() -> None:
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    heartbeat = HeartbeatWriter(os.getenv("HEARTBEAT_PATH", "/app/paper-data/engine-heartbeat"))
+    heartbeat.start()
     agent = ContestPaperAgent()
     loop_seconds = max(15, int(os.getenv("M6_AGENT_LOOP_SECONDS", "60")))
-    while True:
-        try:
-            results = agent.run_once()
-            LOGGER.info("Contest cycle completed traces=%d", len(results))
-        except Exception as exc:
-            LOGGER.exception("Contest cycle failed closed: %s", type(exc).__name__)
-        time.sleep(loop_seconds)
+    try:
+        while True:
+            try:
+                results = agent.run_once()
+                LOGGER.info("Contest cycle completed traces=%d", len(results))
+            except Exception as exc:
+                LOGGER.exception("Contest cycle failed closed: %s", type(exc).__name__)
+            time.sleep(loop_seconds)
+    finally:
+        heartbeat.stop()
 
 
 if __name__ == "__main__":

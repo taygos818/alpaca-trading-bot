@@ -2,6 +2,8 @@ import unittest
 from unittest.mock import patch, MagicMock
 import os
 import sys
+import tempfile
+import time
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
@@ -144,6 +146,30 @@ class TestAlpacaConnectivityMonitoring(unittest.TestCase):
             redis_client.mset.call_args_list[-1].args[0]["alpaca_connectivity_status"],
             "ok",
         )
+
+
+class TestEngineHeartbeatMonitoring(unittest.TestCase):
+    def setUp(self):
+        scheduler_module.ENGINE_HEARTBEAT_ALERTED = False
+
+    @patch("scheduler.EmailNotifier.from_env")
+    @patch("scheduler.DiscordNotifier.from_env")
+    @patch("scheduler.get_redis_client")
+    def test_missing_heartbeat_alerts_once_then_reports_recovery(self, mock_redis, mock_discord, mock_email):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "engine-heartbeat"
+            with patch.dict(
+                os.environ,
+                {"ENGINE_HEARTBEAT_PATH": str(path), "ENGINE_HEARTBEAT_MAX_AGE_SECONDS": "90"},
+                clear=False,
+            ):
+                self.assertFalse(scheduler_module.check_engine_heartbeat())
+                self.assertFalse(scheduler_module.check_engine_heartbeat())
+                self.assertEqual(mock_discord.return_value.send.call_count, 1)
+                path.write_text(str(int(time.time())), encoding="utf-8")
+                self.assertTrue(scheduler_module.check_engine_heartbeat())
+                self.assertEqual(mock_discord.return_value.send.call_count, 2)
+                self.assertEqual(mock_email.return_value.send.call_count, 2)
 
 
 if __name__ == "__main__":

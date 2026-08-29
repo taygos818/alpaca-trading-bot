@@ -3,6 +3,7 @@ import logging
 import os
 import signal
 import time
+from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 import psycopg
@@ -25,6 +26,36 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 redis_client = None
 ALPACA_CONSECUTIVE_FAILURES = 0
 ALPACA_OUTAGE_ALERTED = False
+ENGINE_HEARTBEAT_ALERTED = False
+
+
+def check_engine_heartbeat():
+    global ENGINE_HEARTBEAT_ALERTED
+    path = Path(os.getenv("ENGINE_HEARTBEAT_PATH", "/app/paper-data/engine-heartbeat"))
+    maximum_age = float(os.getenv("ENGINE_HEARTBEAT_MAX_AGE_SECONDS", "90"))
+    age = time.time() - path.stat().st_mtime if path.exists() else float("inf")
+    healthy = 0 <= age <= maximum_age
+    control = get_redis_client()
+    if control:
+        control.mset(
+            {
+                "strategy_engine_heartbeat_status": "ok" if healthy else "stale",
+                "strategy_engine_heartbeat_checked_at": str(time.time()),
+                "strategy_engine_heartbeat_age_seconds": str(age),
+            }
+        )
+    if healthy and ENGINE_HEARTBEAT_ALERTED:
+        ENGINE_HEARTBEAT_ALERTED = False
+        message = "Contest strategy-engine heartbeat recovered."
+        DiscordNotifier.from_env().send(f"[Trading Bot Recovery] {message}")
+        EmailNotifier.from_env().send("[Recovery] Contest engine heartbeat", message)
+    elif not healthy and not ENGINE_HEARTBEAT_ALERTED:
+        ENGINE_HEARTBEAT_ALERTED = True
+        message = f"Contest strategy-engine heartbeat is stale or missing (age={age:.0f}s)."
+        DiscordNotifier.from_env().send(f"[Trading Bot Critical] {message}")
+        EmailNotifier.from_env().send("[Critical] Contest engine heartbeat stale", message)
+    LOGGER.info("Strategy-engine heartbeat healthy=%s age_seconds=%s", healthy, round(age, 1))
+    return healthy
 
 
 def record_alpaca_connectivity(verified: bool, failure_type: str = ""):
@@ -698,6 +729,7 @@ def main():
 
     scheduler = BackgroundScheduler(timezone="America/New_York")
     scheduler.add_job(check_market_hours, "interval", seconds=30)
+    scheduler.add_job(check_engine_heartbeat, "interval", seconds=30)
     
     # Take account snapshot every 5 minutes (reduced from 30s to prevent DB bloat)
     scheduler.add_job(take_account_snapshot, "interval", minutes=5)

@@ -38,11 +38,16 @@ from agent_contracts import (  # noqa: E402
 from execution_gateway import AlpacaCliError, CliResponse  # noqa: E402
 from paper_runtime import (  # noqa: E402
     BoundedPaperLauncher,
+    BrokerOrderSnapshot,
     BrokerStateUnresolved,
     DecisionTraceJournal,
     DeterministicReplayRunner,
     PaperLaunchPolicy,
     PaperAgentCycleRunner,
+    JsonlSubmissionLedger,
+    CompetitionPositionLifecycle,
+    ExitOrderStore,
+    PendingEntryStore,
     ReplayScenario,
 )
 from defined_risk_options import JsonlExitPlanStore  # noqa: E402
@@ -210,6 +215,16 @@ class FakeGateway:
         self.calls.append("submit")
         return CliResponse("order.submit", self.submitted_payload, 0)
 
+    def preview_exit(self, execution):
+        self.calls.append("preview_exit")
+        return CliResponse("order.exit_preview", {"dry_run": True}, 0)
+
+    def submit_exit(self, execution):
+        self.calls.append("submit_exit")
+        payload = dict(self.submitted_payload)
+        payload["client_order_id"] = execution.client_order_id
+        return CliResponse("order.exit_submit", payload, 0)
+
     def order_by_client_id(self, client_order_id):
         self.calls.append("lookup")
         if self.reconciled_payload is None:
@@ -244,19 +259,21 @@ def test_duplicate_client_order_id_is_idempotent_and_never_repreviewed():
     assert gateway.calls == ["lookup"]
 
 
-def test_bounded_submission_allows_one_order_and_rejects_second_or_excess_risk():
+def test_daily_submission_limit_is_restart_safe_and_rejects_excess_risk(tmp_path):
     execution, _ = execution_and_trace()
     policy = PaperLaunchPolicy(
         submission_enabled=True,
         dry_run=False,
         bounded_ack="paper-contest",
+        max_submissions_per_day=1,
         max_authorized_loss_usd=Decimal("100"),
     )
     gateway = FakeGateway()
-    launcher = BoundedPaperLauncher(gateway, policy)
+    ledger = JsonlSubmissionLedger(str(tmp_path / "submissions.jsonl"))
+    launcher = BoundedPaperLauncher(gateway, policy, ledger)
     assert launcher.launch(execution).mode == "submitted"
-    with pytest.raises(BrokerStateUnresolved, match="submission count"):
-        launcher.launch(execution)
+    with pytest.raises(BrokerStateUnresolved, match="daily paper submission"):
+        BoundedPaperLauncher(FakeGateway(), policy, JsonlSubmissionLedger(str(tmp_path / "submissions.jsonl"))).launch(execution)
 
     too_small = replace(policy, max_authorized_loss_usd=Decimal("99"))
     with pytest.raises(BrokerStateUnresolved, match="loss limit"):
@@ -355,7 +372,7 @@ def test_cycle_runner_persists_exit_ownership_on_reconciled_fill(tmp_path):
     reconciler = BoundedPaperLauncher(snapshot_gateway)
     snapshot, event = reconciler.reconcile(execution)
     launcher = SimpleNamespace(
-        launch=lambda item: SimpleNamespace(mode="submitted"),
+        launch=lambda item: SimpleNamespace(mode="submitted", snapshot=snapshot),
         reconcile=lambda item: (snapshot, event),
     )
     plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))
@@ -374,6 +391,69 @@ def test_cycle_runner_persists_exit_ownership_on_reconciled_fill(tmp_path):
     assert result.trace.order_events[0].status is OrderStatus.FILLED
     assert result.trace.assessments[0].state is PositionState.OPEN
     assert plans.load_latest()[0].proposal_id == execution.proposal.record_id
+
+
+def test_frozen_partial_fill_reconciles_across_restart_without_duplicate_exit_plan(tmp_path):
+    execution, _ = execution_and_trace()
+    plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))
+    path = str(tmp_path / "pending-entries.jsonl")
+    initial = BrokerOrderSnapshot(
+        "paper-order.m6", execution.command.client_order_id, "new", 0, Decimal("0"), NOW
+    )
+    PendingEntryStore(path).track(execution, ("evidence.bar",), initial, plans)
+
+    partial = FakeGateway(reconciled=broker_order("partially_filled", filled_qty="1"))
+    assert len(PendingEntryStore(path).reconcile(partial, plans)) == 1
+    assert plans.load_latest()[0].quantity == 1
+
+    filled = FakeGateway(reconciled=broker_order("filled", filled_qty="1"))
+    PendingEntryStore(path).reconcile(filled, plans)
+    assert len(plans.load_latest()) == 1
+    assert PendingEntryStore(path).reconcile(filled, plans) == ()
+
+
+def test_frozen_profit_exit_submits_reconciles_and_survives_restart(tmp_path):
+    execution, _ = execution_and_trace()
+    plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))
+    pending_path = str(tmp_path / "pending.jsonl")
+    filled_snapshot = BrokerOrderSnapshot(
+        "paper-order.m6", execution.command.client_order_id, "filled", 1, Decimal("0.98"), NOW
+    )
+    PendingEntryStore(pending_path).track(execution, ("evidence.bar",), filled_snapshot, plans)
+    policy = PaperLaunchPolicy(
+        submission_enabled=True,
+        dry_run=False,
+        bounded_ack="paper-contest",
+        max_submissions_per_day=30,
+    )
+    gateway = FakeGateway()
+    lifecycle = CompetitionPositionLifecycle(
+        BoundedPaperLauncher(
+            gateway,
+            policy,
+            JsonlSubmissionLedger(str(tmp_path / "submissions.jsonl")),
+        ),
+        plans,
+        PendingEntryStore(pending_path),
+        ExitOrderStore(str(tmp_path / "exit-orders.jsonl")),
+    )
+    positions = [
+        {"symbol": execution.proposal.legs[0].option_symbol, "current_price": "1.30"},
+        {"symbol": execution.proposal.legs[1].option_symbol, "current_price": "0.05"},
+    ]
+    submitted = lifecycle.manage_exits(positions, NOW + timedelta(minutes=5))
+    assert submitted[0]["status"] == "new"
+    client_id = next(iter(lifecycle.exit_orders.latest()))
+    gateway.reconciled_payload = broker_order("filled", filled_qty="1", client_id=client_id)
+
+    restarted = CompetitionPositionLifecycle(
+        lifecycle.launcher,
+        JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl")),
+        PendingEntryStore(pending_path),
+        ExitOrderStore(str(tmp_path / "exit-orders.jsonl")),
+    )
+    restarted.manage_exits(positions, NOW + timedelta(minutes=6))
+    assert restarted.plans.load_latest()[0].state.value == "closed"
 
 
 def test_completed_bar_replay_is_deterministic_and_rejects_lookahead():

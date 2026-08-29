@@ -5,10 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
 import os
+from pathlib import Path
+import threading
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from agent_contracts import AuthorizedExecution, OrderEvent, OrderStatus
+from agent_contracts import AuthorizedExecution, AuthorizedExit, OrderEvent, OrderStatus
 from execution_gateway import AlpacaCliError, AlpacaCliGateway, CliResponse
 
 
@@ -25,16 +29,16 @@ class PaperLaunchPolicy:
     submission_enabled: bool = False
     dry_run: bool = True
     bounded_ack: str = ""
-    max_submissions_per_process: int = 1
-    max_authorized_loss_usd: Decimal = Decimal("150")
-    max_open_orders: int = 4
+    max_submissions_per_day: int = 30
+    max_authorized_loss_usd: Decimal = Decimal("5000")
+    max_open_orders: int = 8
 
     def __post_init__(self) -> None:
         if self.submission_enabled and self.dry_run:
             raise ValueError("paper submission and dry-run cannot both be enabled")
         if self.submission_enabled and self.bounded_ack != "paper-contest":
             raise ValueError("bounded paper acknowledgement is required")
-        if self.max_submissions_per_process <= 0 or self.max_open_orders < 0:
+        if self.max_submissions_per_day <= 0 or self.max_open_orders < 0:
             raise ValueError("invalid paper launch count limit")
         if self.max_authorized_loss_usd <= 0:
             raise ValueError("paper launch risk limit must be positive")
@@ -46,10 +50,45 @@ class PaperLaunchPolicy:
             submission_enabled=enabled,
             dry_run=_flag("PAPER_ORDER_DRY_RUN", True),
             bounded_ack=os.getenv("M6_BOUNDED_SUBMISSION_ACK", "").strip(),
-            max_submissions_per_process=int(os.getenv("M6_MAX_SUBMISSIONS_PER_PROCESS", "1")),
-            max_authorized_loss_usd=Decimal(os.getenv("M6_MAX_AUTHORIZED_LOSS_USD", "150")),
-            max_open_orders=int(os.getenv("M6_MAX_OPEN_ORDERS", "4")),
+            max_submissions_per_day=int(os.getenv("PAPER_MAX_SUBMISSIONS_PER_DAY", "30")),
+            max_authorized_loss_usd=Decimal(os.getenv("M6_MAX_AUTHORIZED_LOSS_USD", "5000")),
+            max_open_orders=int(os.getenv("M6_MAX_OPEN_ORDERS", "8")),
         )
+
+
+class JsonlSubmissionLedger:
+    """Restart-safe count of accepted paper submissions by New York trading date."""
+
+    def __init__(self, path: str = "") -> None:
+        self.path = Path(path) if path else None
+        self._lock = threading.Lock()
+
+    def count(self, trading_date: str, kind: str | None = None) -> int:
+        if self.path is None or not self.path.exists():
+            return 0
+        with self._lock, self.path.open("r", encoding="utf-8") as handle:
+            return sum(
+                1
+                for line in handle
+                if line.strip()
+                and (row := json.loads(line)).get("trading_date") == trading_date
+                and (kind is None or row.get("kind") == kind)
+            )
+
+    def append(self, client_order_id: str, kind: str, submitted_at: datetime) -> None:
+        if self.path is None:
+            return
+        trading_date = submitted_at.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+        payload = {
+            "client_order_id": client_order_id,
+            "kind": kind,
+            "submitted_at": submitted_at.isoformat(),
+            "trading_date": trading_date,
+        }
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +114,22 @@ class LaunchResult:
 
 
 class BoundedPaperLauncher:
-    """One-process submission fuse with mandatory duplicate and broker-state checks."""
+    """Daily bounded paper submission with duplicate and broker-state checks."""
 
-    def __init__(self, gateway: AlpacaCliGateway, policy: PaperLaunchPolicy | None = None) -> None:
+    def __init__(
+        self,
+        gateway: AlpacaCliGateway,
+        policy: PaperLaunchPolicy | None = None,
+        ledger: JsonlSubmissionLedger | None = None,
+    ) -> None:
         self.gateway = gateway
         self.policy = policy or PaperLaunchPolicy.from_env()
-        self._submissions = 0
+        self.ledger = ledger or JsonlSubmissionLedger(os.getenv("PAPER_SUBMISSION_LEDGER_PATH", ""))
+
+    def _check_daily_limit(self, now: datetime) -> None:
+        trading_date = now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+        if self.ledger.count(trading_date, "entry") >= self.policy.max_submissions_per_day:
+            raise BrokerStateUnresolved("daily paper submission limit reached")
 
     def launch(self, execution: AuthorizedExecution) -> LaunchResult:
         existing = self._lookup_existing(execution.command.client_order_id)
@@ -99,16 +148,34 @@ class BoundedPaperLauncher:
         preview = self.gateway.preview(execution)
         if not self.policy.submission_enabled:
             return LaunchResult("dry_run", preview, None)
-        if self._submissions >= self.policy.max_submissions_per_process:
-            raise BrokerStateUnresolved("bounded submission count reached")
+        now = datetime.now(timezone.utc)
+        self._check_daily_limit(now)
         if execution.authorization.authorized_maximum_loss > self.policy.max_authorized_loss_usd:
             raise BrokerStateUnresolved("authorization exceeds bounded paper loss limit")
 
         response = self.gateway.submit(execution)
-        self._submissions += 1
         snapshot = normalize_broker_order(response.payload)
+        self.ledger.append(execution.command.client_order_id, "entry", now)
         if snapshot.client_order_id != execution.command.client_order_id:
             raise BrokerStateUnresolved("broker response client order ID mismatch")
+        return LaunchResult("submitted", response, snapshot)
+
+    def launch_exit(self, execution: AuthorizedExit) -> LaunchResult:
+        existing = self._lookup_existing(execution.client_order_id)
+        if existing is not None:
+            return LaunchResult("duplicate", None, existing, True)
+        open_orders = _orders(self.gateway.open_orders().payload)
+        if len([item for item in open_orders if not item.is_final]) >= self.policy.max_open_orders:
+            raise BrokerStateUnresolved("maximum open-order count reached")
+        preview = self.gateway.preview_exit(execution)
+        if not self.policy.submission_enabled:
+            return LaunchResult("dry_run", preview, None)
+        now = datetime.now(timezone.utc)
+        response = self.gateway.submit_exit(execution)
+        snapshot = normalize_broker_order(response.payload)
+        self.ledger.append(execution.client_order_id, "exit", now)
+        if snapshot.client_order_id != execution.client_order_id:
+            raise BrokerStateUnresolved("broker exit response client order ID mismatch")
         return LaunchResult("submitted", response, snapshot)
 
     def _lookup_existing(self, client_order_id: str) -> BrokerOrderSnapshot | None:

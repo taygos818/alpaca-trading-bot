@@ -56,6 +56,16 @@ Acceptance: complete evidence-to-exit trace for every proposal and trade; no unr
 
 Rollback: pause new entries, cancel eligible paper orders, retain position management, and return to dry-run.
 
+Competition launch profile (August 31 through September 3, 2026): discovery retries begin at
+09:30 ET; entries stop at 15:15 ET on September 3; deterministic exits force flattening by
+15:45 ET. Accepted entries and exits are restart-safe, partial fills create owned exit plans,
+and entry throughput is bounded by daily submissions, open orders, defined maximum loss,
+portfolio exposure, and daily drawdown. Exit orders are never blocked by the entry-count fuse.
+
+Rollback: set `PAPER_ORDER_SUBMISSION_ENABLED=false` and `PAPER_ORDER_DRY_RUN=true`, rebuild
+the strategy engine, and leave reconciliation plus deterministic exits running for any
+existing paper positions.
+
 ## Milestone 7 — Dashboard and explainability
 
 Show agent findings, disagreements, opportunity rankings, chosen structures, risk decisions, rejected alternatives, positions, P&L, exits, and provenance without exposing credentials or sensitive account identifiers.
