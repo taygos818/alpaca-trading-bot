@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from decimal import Decimal
 import hashlib
 import logging
 import os
+import re
 import time
 
 from agent_contracts import Direction
@@ -58,6 +60,7 @@ from utils.market_discovery import load_current_shortlist
 
 
 LOGGER = logging.getLogger("contest-paper-agent")
+OCC_OPTION_SYMBOL = re.compile(r"^([A-Z]{1,6})\d{6}[CP]\d{8}$")
 
 
 def _flag(name: str, default: bool = False) -> bool:
@@ -95,6 +98,40 @@ def _bounded_fresh_news(news) -> tuple:
     maximum = max(1, int(os.getenv("M6_MAX_NEWS_ITEMS_PER_CANDIDATE", "8")))
     fresh = tuple(item for item in news if item.is_fresh)
     return fresh[-maximum:]
+
+
+def _reconcile_candidate_direction(candidate, analyses, minimum_confidence: Decimal):
+    by_name = {item.agent_name: item for item in analyses}
+    required = tuple(by_name.get(name) for name in ("technical", "catalyst"))
+    if any(item is None for item in required):
+        return candidate
+    directions = {
+        item.direction
+        for item in required
+        if item.disposition.value == "analyze"
+        and item.confidence >= minimum_confidence
+        and item.direction is not Direction.NEUTRAL
+    }
+    if len(directions) == 1:
+        return replace(candidate, direction=next(iter(directions)))
+    return candidate
+
+
+def _option_underlying(symbol: str) -> str:
+    normalized = str(symbol or "").strip().upper()
+    match = OCC_OPTION_SYMBOL.fullmatch(normalized)
+    return match.group(1) if match else normalized
+
+
+def _order_underlyings(order: dict) -> set[str]:
+    symbols = {
+        str(order.get("underlying_symbol") or ""),
+        str(order.get("symbol") or ""),
+    }
+    legs = order.get("legs")
+    if isinstance(legs, list):
+        symbols.update(str(item.get("symbol") or "") for item in legs if isinstance(item, dict))
+    return {_option_underlying(symbol) for symbol in symbols if symbol.strip()}
 
 
 class ContestPaperAgent:
@@ -161,11 +198,28 @@ class ContestPaperAgent:
         account = self.gateway.account().payload
         open_orders = _list_payload(self.gateway.open_orders().payload, "orders")
         risk_state, portfolio = self._portfolio(account, positions, open_orders)
+        occupied_underlyings = set(portfolio.open_underlyings)
+        occupied_underlyings.update(
+            underlying
+            for order in open_orders
+            for underlying in _order_underlyings(order)
+        )
+        underlying_risk = dict(portfolio.underlying_maximum_loss)
         maximum = int(os.getenv("M6_MAX_CANDIDATES_PER_CYCLE", "5"))
         results = []
         for index, raw_symbol in enumerate(shortlist["symbols"][:maximum], start=1):
             symbol = str(raw_symbol).upper()
             trace_id = self._trace_id(symbol, timestamp)
+            if symbol in occupied_underlyings:
+                LOGGER.info("Candidate %s suppressed because the underlying already has exposure or an open order", symbol)
+                self.journal.append_failure(
+                    trace_id=trace_id,
+                    phase="portfolio_gate",
+                    outcome="existing_underlying_exposure",
+                    metadata={"opportunity_rankings": [{"symbol": symbol, "rank": index}]},
+                    recorded_at=timestamp,
+                )
+                continue
             try:
                 evidence, candidate, provider_failures = self._evidence_and_candidate(
                     shortlist, symbol, trace_id, timestamp
@@ -185,10 +239,18 @@ class ContestPaperAgent:
 
                 builder = DynamicOptionsProposalBuilder(
                     DefinedRiskOptionsStrategy(self.config),
-                    candidate_provider=lambda bundle, items, analyses, item=candidate: (item,),
+                    candidate_provider=lambda bundle, items, analyses, item=candidate: (
+                        _reconcile_candidate_direction(item, analyses, self.config.min_analysis_confidence),
+                    ),
                     chain_provider=chain_provider,
-                    risk_provider=lambda item, state=risk_state: state,
-                    clock=lambda current=timestamp: current,
+                    risk_provider=lambda item, state=risk_state, by_symbol=underlying_risk: replace(
+                        state,
+                        underlying_maximum_loss=by_symbol.get(item.symbol, Decimal("0")),
+                    ),
+                    # Option snapshots are fetched after evidence and AI analysis.
+                    # Use selection time for quote age so newly arrived quotes are
+                    # not rejected as being in the future relative to cycle start.
+                    clock=lambda: datetime.now(timezone.utc),
                 )
                 limits = AllocationLimits(
                     max_open_positions=self.config.max_open_positions,
@@ -314,21 +376,33 @@ class ContestPaperAgent:
             raise RuntimeError("paper account state is unavailable")
         equity = Decimal(str(account.get("equity") or 0))
         cash = Decimal(str(account.get("cash") or 0))
-        reserved = sum((abs(Decimal(str(item.get("cost_basis") or item.get("market_value") or 0))) for item in positions), Decimal("0"))
-        open_underlyings = tuple(sorted({str(item.get("underlying_symbol") or item.get("symbol") or "") for item in positions if item.get("symbol")}))
+        risk_by_underlying: dict[str, Decimal] = {}
+        for item in positions:
+            symbol = _option_underlying(str(item.get("underlying_symbol") or item.get("symbol") or ""))
+            if not symbol:
+                continue
+            amount = abs(Decimal(str(item.get("cost_basis") or item.get("market_value") or 0)))
+            risk_by_underlying[symbol] = risk_by_underlying.get(symbol, Decimal("0")) + amount
+        reserved = sum(risk_by_underlying.values(), Decimal("0"))
+        open_underlyings = tuple(sorted(risk_by_underlying))
         state = OptionsRiskState(
             options_trading_level=int(account.get("options_trading_level") or 0),
             equity=equity,
             cash=cash,
             options_buying_power=Decimal(str(account.get("options_buying_power") or account.get("buying_power") or 0)),
             daily_pnl=equity - Decimal(str(account.get("last_equity") or equity)),
-            open_position_count=len(positions),
+            open_position_count=len(open_underlyings),
             pending_order_count=len(open_orders),
             reserved_maximum_loss=reserved,
             underlying_maximum_loss=Decimal("0"),
             correlation_maximum_loss=reserved,
         )
-        portfolio = PortfolioSnapshot(open_underlyings, len(positions), reserved)
+        portfolio = PortfolioSnapshot(
+            open_underlyings,
+            len(open_underlyings),
+            reserved,
+            tuple(sorted(risk_by_underlying.items())),
+        )
         return state, portfolio
 
     @staticmethod

@@ -84,6 +84,21 @@ class FeatherlessClient:
         bundle: EvidenceBundle,
         evidence: tuple[EvidenceItem, ...],
     ) -> FeatherlessResult:
+        attempts = self.settings.invalid_output_retries + 1
+        for attempt in range(attempts):
+            try:
+                return self._analyze_once(agent_name, bundle, evidence)
+            except FeatherlessInvalidOutput:
+                if attempt + 1 >= attempts:
+                    raise
+        raise FeatherlessInvalidOutput("Featherless structured-output retry exhausted")
+
+    def _analyze_once(
+        self,
+        agent_name: str,
+        bundle: EvidenceBundle,
+        evidence: tuple[EvidenceItem, ...],
+    ) -> FeatherlessResult:
         self._require_enabled()
         messages = build_messages(agent_name, bundle, evidence)
         prompt = canonical_json(messages)

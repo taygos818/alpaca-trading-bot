@@ -84,6 +84,7 @@ class FeatherlessSettings:
     model_id: str = DEFAULT_MODEL_ID
     timeout_seconds: float = 30.0
     max_completion_tokens: int = 700
+    invalid_output_retries: int = 0
     max_prompt_chars: int = 24000
     max_requests_per_trace: int = 3
     max_total_tokens_per_trace: int = 75000
@@ -101,6 +102,8 @@ class FeatherlessSettings:
             raise ValueError("Featherless base URL must use the approved HTTPS endpoint")
         if self.max_completion_tokens <= 0 or self.max_completion_tokens > profile.max_completion_tokens:
             raise ValueError("invalid Featherless completion-token limit")
+        if self.invalid_output_retries < 0 or self.invalid_output_retries > 2:
+            raise ValueError("Featherless invalid-output retries must be between zero and two")
         if self.max_prompt_chars <= 0 or self.max_prompt_chars + self.max_completion_tokens > profile.context_length:
             raise ValueError("Featherless prompt budget exceeds model context")
         if self.max_requests_per_trace <= 0 or self.max_total_tokens_per_trace <= 0:
@@ -120,6 +123,7 @@ class FeatherlessSettings:
             model_id=os.getenv("FEATHERLESS_MODEL", DEFAULT_MODEL_ID).strip(),
             timeout_seconds=float(os.getenv("FEATHERLESS_TIMEOUT_SECONDS", "30")),
             max_completion_tokens=int(os.getenv("FEATHERLESS_MAX_COMPLETION_TOKENS", "700")),
+            invalid_output_retries=int(os.getenv("FEATHERLESS_INVALID_OUTPUT_RETRIES", "1")),
             max_prompt_chars=int(os.getenv("FEATHERLESS_MAX_PROMPT_CHARS", "24000")),
             max_requests_per_trace=int(os.getenv("FEATHERLESS_MAX_REQUESTS_PER_TRACE", "3")),
             max_total_tokens_per_trace=int(os.getenv("FEATHERLESS_MAX_TOTAL_TOKENS_PER_TRACE", "75000")),

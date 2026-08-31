@@ -280,6 +280,28 @@ def test_daily_submission_limit_is_restart_safe_and_rejects_excess_risk(tmp_path
         BoundedPaperLauncher(FakeGateway(), too_small).launch(execution)
 
 
+def test_per_underlying_cooldown_is_restart_safe(tmp_path):
+    execution, _ = execution_and_trace()
+    policy = PaperLaunchPolicy(
+        submission_enabled=True,
+        dry_run=False,
+        bounded_ack="paper-contest",
+        symbol_cooldown_minutes=5,
+    )
+    ledger_path = str(tmp_path / "submissions.jsonl")
+    assert BoundedPaperLauncher(
+        FakeGateway(), policy, JsonlSubmissionLedger(ledger_path)
+    ).launch(execution).mode == "submitted"
+
+    with pytest.raises(BrokerStateUnresolved, match="per-underlying"):
+        BoundedPaperLauncher(
+            FakeGateway(), policy, JsonlSubmissionLedger(ledger_path)
+        ).launch(execution)
+
+    rows = (tmp_path / "submissions.jsonl").read_text(encoding="utf-8")
+    assert '"underlying":"ANF"' in rows
+
+
 def test_entry_pause_keeps_position_reducing_exit_submission_enabled():
     execution, _ = execution_and_trace()
     policy = PaperLaunchPolicy(

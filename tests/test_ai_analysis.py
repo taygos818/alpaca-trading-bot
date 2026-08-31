@@ -195,6 +195,22 @@ def test_valid_response_becomes_typed_analysis_and_hash_only_audit():
     assert "test-featherless-key" not in json.dumps(record, default=str)
 
 
+def test_invalid_structured_output_retries_once_with_separate_audits():
+    bundle, items = bundle_and_evidence()
+    invalid = response_payload(extra={"unexpected": "field"})
+    client, session, audit = client_for(
+        [FakeResponse(invalid), FakeResponse(response_payload())],
+        invalid_output_retries=1,
+        max_requests_per_trace=2,
+    )
+
+    result = client.analyze("technical", bundle, items)
+
+    assert result.draft.disposition is AnalysisDisposition.ANALYZE
+    assert len(session.calls) == 2
+    assert [record.error_code for record in audit.records] == ["invalid_output", ""]
+
+
 def test_jsonl_audit_persists_hashes_without_prompt_response_or_key(tmp_path):
     bundle, items = bundle_and_evidence()
     session = FakeSession([FakeResponse(response_payload())])

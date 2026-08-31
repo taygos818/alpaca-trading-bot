@@ -210,6 +210,22 @@ def test_strategy_is_default_off():
         DefinedRiskOptionsStrategy().evaluate(candidate(), call_chain(), analyses, risk(), NOW)
 
 
+def test_competition_liquidity_thresholds_load_from_environment(monkeypatch):
+    monkeypatch.setenv("OPTIONS_MAX_QUOTE_AGE_SECONDS", "30")
+    monkeypatch.setenv("OPTIONS_MIN_OPEN_INTEREST", "0")
+    monkeypatch.setenv("OPTIONS_MIN_VOLUME", "5")
+    monkeypatch.setenv("OPTIONS_MAX_LEG_SPREAD_PCT", "0.25")
+    monkeypatch.setenv("OPTIONS_MIN_REWARD_RISK", "0.40")
+
+    config = DefinedRiskOptionsConfig.from_env()
+
+    assert config.max_quote_age_seconds == 30
+    assert config.min_open_interest == 0
+    assert config.min_volume == 5
+    assert config.max_leg_spread_pct == Decimal("0.25")
+    assert config.min_reward_risk == Decimal("0.40")
+
+
 def test_level3_selects_defined_risk_call_spread_with_whole_contract_sizing():
     _, _, analyses = frozen_context()
     selection = strategy().evaluate(candidate(), call_chain(), analyses, risk(), NOW)
