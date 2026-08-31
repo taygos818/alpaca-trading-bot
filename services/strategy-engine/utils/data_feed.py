@@ -493,7 +493,9 @@ class AlpacaMarketDataProvider:
             "limit": fetch_limit,
             "feed": self.data_feed,
             "adjustment": "raw",
-            "sort": "asc",
+            # Alpaca applies limit after sorting. Ascending order returned the
+            # oldest bars in the lookback window, not the latest market bars.
+            "sort": "desc",
         }
 
         # Calculate start time based on timeframe to ensure we retrieve enough data points
@@ -524,6 +526,7 @@ class AlpacaMarketDataProvider:
         bars = response.json().get("bars", [])
         if not bars:
             raise DataFeedUnavailable(f"Alpaca returned no bars for {symbol} timeframe={timeframe}")
+        bars = sorted(bars, key=lambda bar: str(bar.get("t") or ""))
         self._record_observation(symbol, bars[-1], "alpaca")
 
         if self.redis_client:

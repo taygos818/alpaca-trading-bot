@@ -91,6 +91,12 @@ def _direction_and_rank(shortlist: dict, symbol: str) -> tuple[Direction, Decima
     return (Direction.BULLISH if return_pct >= 0 else Direction.BEARISH), rank
 
 
+def _bounded_fresh_news(news) -> tuple:
+    maximum = max(1, int(os.getenv("M6_MAX_NEWS_ITEMS_PER_CANDIDATE", "8")))
+    fresh = tuple(item for item in news if item.is_fresh)
+    return fresh[-maximum:]
+
+
 class ContestPaperAgent:
     def __init__(self) -> None:
         self.config = DefinedRiskOptionsConfig.from_env()
@@ -161,7 +167,9 @@ class ContestPaperAgent:
             symbol = str(raw_symbol).upper()
             trace_id = self._trace_id(symbol, timestamp)
             try:
-                evidence, candidate = self._evidence_and_candidate(shortlist, symbol, trace_id, timestamp)
+                evidence, candidate, provider_failures = self._evidence_and_candidate(
+                    shortlist, symbol, trace_id, timestamp
+                )
                 if candidate is None:
                     continue
                 chain_cache = {}
@@ -211,12 +219,27 @@ class ContestPaperAgent:
                     now=timestamp,
                     environment={"AGENT_COORDINATOR_ENABLED": "true", "AGENT_COORDINATOR_SHADOW_MODE": "true"},
                     display_metadata={
-                        "opportunity_rankings": [{"symbol": symbol, "rank": index, "score": format(candidate.rank, "f")}]
+                        "opportunity_rankings": [{"symbol": symbol, "rank": index, "score": format(candidate.rank, "f")}],
+                        "provider_failures": provider_failures,
                     },
                 )
                 results.append(result)
             except (DataFeedUnavailable, ProviderUnavailable, ValueError, RuntimeError) as exc:
                 LOGGER.warning("Candidate %s failed closed: %s", symbol, type(exc).__name__)
+                self.journal.append_failure(
+                    trace_id=trace_id,
+                    phase="evidence_or_analysis",
+                    outcome="provider_unavailable" if isinstance(exc, (DataFeedUnavailable, ProviderUnavailable)) else "cycle_failed",
+                    metadata={
+                        "opportunity_rankings": [{"symbol": symbol, "rank": index}],
+                        "provider_failures": [{
+                            "provider": "candidate_pipeline",
+                            "error_type": type(exc).__name__,
+                            "reason": "required candidate evidence or analysis was unavailable",
+                        }],
+                    },
+                    recorded_at=timestamp,
+                )
         return tuple(results)
 
     def _evidence_and_candidate(self, shortlist, symbol, trace_id, now):
@@ -237,14 +260,10 @@ class ContestPaperAgent:
         news = self.finnhub.company_news(
             symbol, (now - timedelta(days=3)).date(), now.date(), trace_id=trace_id, received_at=now
         )
-        fresh_news = tuple(item for item in news if item.is_fresh)
+        fresh_news = _bounded_fresh_news(news)
         if not fresh_news:
-            return (bar_item,), None
-        research = []
-        if YFinanceSettings.from_env().enabled:
-            research.extend(self.yfinance.history(symbol, trace_id=trace_id, received_at=now)[-3:])
-        if FredSettings.from_env().enabled:
-            research.extend(self.fred.fetch("policy_rate", trace_id=trace_id, received_at=now))
+            return (bar_item,), None, []
+        research, provider_failures = self._optional_research(symbol, trace_id, now)
         direction, rank = _direction_and_rank(shortlist, symbol)
         candidate = DiscoveryCandidate(
             symbol=symbol,
@@ -254,7 +273,41 @@ class ContestPaperAgent:
             correlation_group="broad_equity",
             rank=rank,
         )
-        return tuple((bar_item, *fresh_news, *research)), candidate
+        return tuple((bar_item, *fresh_news, *research)), candidate, provider_failures
+
+    def _optional_research(self, symbol, trace_id, now):
+        research = []
+        failures = []
+        providers = (
+            (
+                "yfinance",
+                YFinanceSettings.from_env().enabled,
+                lambda: self.yfinance.history(symbol, trace_id=trace_id, received_at=now)[-3:],
+            ),
+            (
+                "fred",
+                FredSettings.from_env().enabled,
+                lambda: self.fred.fetch("policy_rate", trace_id=trace_id, received_at=now),
+            ),
+        )
+        for provider, enabled, fetch in providers:
+            if not enabled:
+                continue
+            try:
+                research.extend(fetch())
+            except ProviderUnavailable as exc:
+                LOGGER.warning(
+                    "Candidate %s optional provider %s degraded: %s",
+                    symbol,
+                    provider,
+                    type(exc).__name__,
+                )
+                failures.append({
+                    "provider": provider,
+                    "error_type": type(exc).__name__,
+                    "reason": "optional secondary research unavailable",
+                })
+        return research, failures
 
     def _portfolio(self, account, positions, open_orders):
         if not isinstance(account, dict):

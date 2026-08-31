@@ -59,11 +59,13 @@ class FakeSession:
     def __init__(self, route_map: dict[tuple[str, str], dict]):
         self.route_map = route_map
         self.calls: list[tuple[str, str]] = []
+        self.request_params: list[dict] = []
 
     def get(self, url, headers=None, params=None, timeout=None):
         params = params or {}
         key = (url, str(params.get("timeframe", params.get("series_id", ""))))
         self.calls.append(key)
+        self.request_params.append(dict(params))
         payload = self.route_map[key]
         return FakeResponse(payload)
 
@@ -236,6 +238,30 @@ class FakeRedis:
 
 
 class DataFeedCachingTests(unittest.TestCase):
+    def test_alpaca_provider_requests_latest_bars_and_normalizes_chronology(self):
+        session = FakeSession({
+            ("https://data.alpaca.markets/v2/stocks/SPY/bars", "1Min"): {
+                "bars": [
+                    {"t": "2026-08-31T14:32:00Z", "c": 102.0},
+                    {"t": "2026-08-31T14:31:00Z", "c": 101.0},
+                    {"t": "2026-08-31T14:30:00Z", "c": 100.0},
+                ]
+            }
+        })
+        provider = AlpacaMarketDataProvider(
+            api_key="alpaca-key",
+            secret_key="alpaca-secret",
+            base_url="https://data.alpaca.markets",
+            data_feed="iex",
+            indicator_settings=IndicatorSettings(),
+            session=session,
+        )
+
+        bars = provider._get_bars("SPY", "1Min", 3)
+
+        self.assertEqual(session.request_params[0]["sort"], "desc")
+        self.assertEqual([bar["c"] for bar in bars], [100.0, 101.0, 102.0])
+
     def test_alpaca_provider_redis_caching(self):
         fake_redis = FakeRedis()
         
@@ -380,5 +406,4 @@ class DataFeedVolatilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 

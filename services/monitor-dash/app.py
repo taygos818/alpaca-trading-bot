@@ -323,6 +323,15 @@ def public_decision_record(record):
     assessments = trace.get("assessments") if isinstance(trace.get("assessments"), list) else []
     evidence = trace.get("evidence") if isinstance(trace.get("evidence"), list) else []
     metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    provider_failures = [
+        {
+            "provider": str(item.get("provider") or "unknown")[:64],
+            "error_type": str(item.get("error_type") or "unavailable")[:64],
+            "reason": str(item.get("reason") or "provider unavailable")[:160],
+        }
+        for item in metadata.get("provider_failures", [])
+        if isinstance(item, dict)
+    ]
     return {
         "trace_id": record.get("trace_id"),
         "phase": record.get("phase", "unknown"),
@@ -330,6 +339,7 @@ def public_decision_record(record):
         "fingerprint": record.get("fingerprint", ""),
         "recorded_at": record.get("recorded_at"),
         "opportunity_rankings": metadata.get("opportunity_rankings", []),
+        "provider_failures": provider_failures,
         "agents": [
             {
                 "name": item.get("agent_name"),
@@ -378,7 +388,9 @@ def public_decision_record(record):
         ],
         "rejections": [
             item.get("reason") for item in authorizations if item.get("decision") == "reject"
-        ] + [item.get("objection") for item in objections if item.get("blocking")],
+        ] + [item.get("objection") for item in objections if item.get("blocking")] + [
+            f"{item['provider']}: {item['reason']}" for item in provider_failures
+        ],
         "positions": [
             {
                 "key": item.get("position_key"),
@@ -454,14 +466,24 @@ def load_agent_activity(limit: int = 100):
     for item in _jsonl_tail(DECISION_TRACE_PATH, limit):
         trace = item.get("trace") if isinstance(item.get("trace"), dict) else {}
         proposals = trace.get("proposals") if isinstance(trace.get("proposals"), list) else []
-        symbol = next((row.get("underlying") for row in proposals if isinstance(row, dict)), None)
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        rankings = metadata.get("opportunity_rankings") if isinstance(metadata.get("opportunity_rankings"), list) else []
+        failures = metadata.get("provider_failures") if isinstance(metadata.get("provider_failures"), list) else []
+        symbol = next((row.get("underlying") for row in proposals if isinstance(row, dict)), None) or next(
+            (row.get("symbol") for row in rankings if isinstance(row, dict)), None
+        )
+        failure_detail = "; ".join(
+            f"{str(row.get('provider') or 'provider')}: {str(row.get('reason') or 'unavailable')}"
+            for row in failures if isinstance(row, dict)
+        )
+        outcome = str(item.get("outcome") or "decision")
         activity.append(
             {
                 "timestamp": item.get("recorded_at"),
                 "source": "decision",
-                "severity": "warning" if item.get("outcome") in {"no_authorized_trade", "rejected"} else "info",
-                "title": f"{symbol or 'Agent'} · {str(item.get('outcome') or 'decision').replace('_', ' ')}",
-                "detail": str(item.get("trace_id") or "trace unavailable")[:128],
+                "severity": "warning" if outcome in {"no_authorized_trade", "rejected", "provider_unavailable", "cycle_failed"} or failures else "info",
+                "title": f"{symbol or 'Agent'} · {outcome.replace('_', ' ')}",
+                "detail": (failure_detail or str(item.get("trace_id") or "trace unavailable"))[:160],
             }
         )
     for item in _jsonl_tail(SUBMISSION_LEDGER_PATH, limit):

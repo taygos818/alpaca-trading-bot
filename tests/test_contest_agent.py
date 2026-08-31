@@ -10,8 +10,9 @@ ENGINE = ROOT / "services" / "strategy-engine"
 sys.path.insert(0, str(ENGINE))
 
 from agent_contracts import Direction  # noqa: E402
-from contest_agent import ContestPaperAgent, _direction_and_rank, _list_payload  # noqa: E402
+from contest_agent import ContestPaperAgent, _bounded_fresh_news, _direction_and_rank, _list_payload  # noqa: E402
 from execution_gateway import CliResponse  # noqa: E402
+from external_data import ProviderUnavailable  # noqa: E402
 
 
 def test_dynamic_shortlist_direction_and_rank_has_no_symbol_allowlist():
@@ -34,6 +35,15 @@ def test_payload_normalization_is_fail_closed_for_unknown_shapes():
     assert _list_payload({"unexpected": [{"id": "1"}]}, "orders") == []
 
 
+def test_fresh_news_is_bounded_to_most_recent_items(monkeypatch):
+    monkeypatch.setenv("M6_MAX_NEWS_ITEMS_PER_CANDIDATE", "2")
+    news = tuple(SimpleNamespace(is_fresh=True, record_id=f"news.{index}") for index in range(4))
+
+    bounded = _bounded_fresh_news(news)
+
+    assert [item.record_id for item in bounded] == ["news.2", "news.3"]
+
+
 def test_market_closed_cycle_never_calls_discovery_data_ai_or_submission():
     agent = ContestPaperAgent.__new__(ContestPaperAgent)
     agent.config = SimpleNamespace(enabled=True)
@@ -48,3 +58,23 @@ def test_compose_runs_contest_entrypoint_with_default_off_submission():
     assert 'command: ["python", "contest_agent.py"]' in engine
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in engine
     assert "DEFINED_RISK_OPTIONS_ENABLED: ${DEFINED_RISK_OPTIONS_ENABLED:-false}" in engine
+
+
+def test_optional_research_failure_is_recorded_without_blocking_candidate(monkeypatch):
+    monkeypatch.setenv("YFINANCE_ENABLED", "true")
+    monkeypatch.setenv("FRED_ENABLED", "true")
+    agent = ContestPaperAgent.__new__(ContestPaperAgent)
+    agent.yfinance = SimpleNamespace(
+        history=lambda *args, **kwargs: (_ for _ in ()).throw(ProviderUnavailable("missing optional module"))
+    )
+    fred_item = SimpleNamespace(provider="fred")
+    agent.fred = SimpleNamespace(fetch=lambda *args, **kwargs: (fred_item,))
+
+    research, failures = agent._optional_research("AAL", "trace.optional", datetime.now(timezone.utc))
+
+    assert research == [fred_item]
+    assert failures == [{
+        "provider": "yfinance",
+        "error_type": "ProviderUnavailable",
+        "reason": "optional secondary research unavailable",
+    }]

@@ -208,6 +208,32 @@ class MonitorDashTests(unittest.TestCase):
         self.assertNotIn("sensitive-broker-id", encoded)
         self.assertNotIn("not-for-dashboard", encoded)
 
+    def test_provider_failure_is_visible_in_decisions_and_activity(self):
+        record = {
+            "trace_id": "trace.provider.failure",
+            "phase": "evidence_or_analysis",
+            "outcome": "provider_unavailable",
+            "fingerprint": "b" * 64,
+            "recorded_at": "2026-08-31T14:00:00Z",
+            "metadata": {
+                "opportunity_rankings": [{"symbol": "AAL", "rank": 1}],
+                "provider_failures": [{
+                    "provider": "yfinance",
+                    "error_type": "ProviderUnavailable",
+                    "reason": "optional secondary research unavailable",
+                }],
+            },
+            "trace": {"evidence": [], "analyses": [], "proposals": [], "objections": [], "authorizations": [], "order_events": [], "assessments": []},
+        }
+        monitor_dash.DECISION_TRACE_PATH.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+        decision = self.client.get("/api/agent-decisions").get_json()["records"][0]
+        self.assertEqual(decision["provider_failures"][0]["provider"], "yfinance")
+        self.assertIn("yfinance", decision["rejections"][0])
+        activity = self.client.get("/api/agent-activity").get_json()["records"][0]
+        self.assertEqual(activity["title"], "AAL · provider unavailable")
+        self.assertIn("optional secondary research unavailable", activity["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

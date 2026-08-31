@@ -351,6 +351,28 @@ def test_decision_journal_persists_latest_complete_trace_without_secrets(tmp_pat
         journal.append(initial, phase="preview", outcome="blocked", metadata={"alpaca_api_key": "never"})
 
 
+def test_decision_journal_persists_pretrace_provider_failure(tmp_path):
+    journal = DecisionTraceJournal(str(tmp_path / "decision-traces.jsonl"))
+    record = journal.append_failure(
+        trace_id="trace.provider.failure",
+        phase="evidence_or_analysis",
+        outcome="provider_unavailable",
+        metadata={
+            "opportunity_rankings": [{"symbol": "AAL", "rank": 1}],
+            "provider_failures": [{
+                "provider": "yfinance",
+                "error_type": "ProviderUnavailable",
+                "reason": "optional secondary research unavailable",
+            }],
+        },
+        recorded_at=NOW,
+    )
+
+    assert record.outcome == "provider_unavailable"
+    assert record.trace["proposals"] == []
+    assert len(record.fingerprint) == 64
+
+
 def test_cycle_runner_persists_coordinator_to_preview_trace(tmp_path):
     execution, base_trace = execution_and_trace()
     coordinator_result = SimpleNamespace(

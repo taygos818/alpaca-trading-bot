@@ -71,6 +71,51 @@ class DecisionTraceJournal:
                 handle.flush()
         return _decode_record(json.loads(encoded))
 
+    def append_failure(
+        self,
+        *,
+        trace_id: str,
+        phase: str,
+        outcome: str,
+        metadata: dict[str, Any] | None = None,
+        recorded_at: datetime | None = None,
+    ) -> JournalRecord:
+        """Persist a sanitized failure that occurred before a full trace existed."""
+        if not trace_id or not phase or not outcome:
+            raise ValueError("failure trace id, phase, and outcome are required")
+        safe_metadata = metadata or {}
+        _reject_sensitive_keys(safe_metadata)
+        timestamp = recorded_at or datetime.now(timezone.utc)
+        trace = {
+            "evidence": [],
+            "analyses": [],
+            "proposals": [],
+            "objections": [],
+            "authorizations": [],
+            "commands": [],
+            "order_events": [],
+            "assessments": [],
+        }
+        payload = {
+            "schema_version": "1.0",
+            "trace_id": trace_id,
+            "phase": phase,
+            "outcome": outcome,
+            "fingerprint": contract_fingerprint(
+                {"trace_id": trace_id, "phase": phase, "outcome": outcome, "metadata": safe_metadata}
+            ),
+            "recorded_at": timestamp,
+            "trace": trace,
+            "metadata": safe_metadata,
+        }
+        encoded = canonical_json(payload)
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(encoded + "\n")
+                handle.flush()
+        return _decode_record(json.loads(encoded))
+
     def load_latest(self, limit: int = 100) -> tuple[JournalRecord, ...]:
         if limit <= 0:
             raise ValueError("journal limit must be positive")
