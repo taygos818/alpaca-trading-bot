@@ -75,18 +75,22 @@ class DefinedRiskOptionsStrategy:
             return "correlation-group risk limit reached"
         if not analyses:
             return "independent analyses are missing"
-        if any(item.disposition is AnalysisDisposition.ABSTAIN for item in analyses):
-            return "an independent analysis abstained"
         by_name = {item.agent_name: item for item in analyses}
         for required in ("technical", "catalyst"):
             item = by_name.get(required)
             if item is None:
                 return f"{required} analysis is missing"
-            if item.direction is not candidate.direction or item.confidence < self.config.min_analysis_confidence:
-                return f"{required} analysis does not confirm the candidate"
-        macro = by_name.get("macro")
-        if macro is not None and macro.direction not in {Direction.NEUTRAL, candidate.direction}:
-            return "macro analysis opposes the candidate"
+        opposition = [
+            item
+            for item in analyses
+            if item.disposition is AnalysisDisposition.ANALYZE
+            and item.direction not in {Direction.NEUTRAL, candidate.direction}
+            and item.confidence >= self.config.min_analysis_confidence
+        ]
+        if len(opposition) >= 2:
+            return "independent AI veto opposes the deterministic signal"
+        if not any(item.disposition is AnalysisDisposition.ANALYZE for item in analyses):
+            return "all independent analyses abstained"
         cited = {citation for item in analyses for citation in item.cited_evidence_ids}
         if not set(candidate.catalyst_evidence_ids).intersection(cited):
             return "catalyst evidence is not cited"
@@ -157,7 +161,7 @@ class DefinedRiskOptionsStrategy:
             pairs,
             key=lambda row: (row[0], row[1], row[2].expiration, row[2].strike, row[3].strike),
         )
-        quantity = self._quantity(debit * HUNDRED, risk)
+        quantity = self._quantity(debit * HUNDRED, risk, (long_leg, short_leg))
         if quantity <= 0:
             return None
         right_name = "call" if candidate.direction is Direction.BULLISH else "put"
@@ -204,7 +208,7 @@ class DefinedRiskOptionsStrategy:
             ),
         )
         debit = _round_up(contract.ask)
-        quantity = self._quantity(debit * HUNDRED, risk)
+        quantity = self._quantity(debit * HUNDRED, risk, (contract,))
         if quantity <= 0:
             return None
         right_name = "call" if candidate.direction is Direction.BULLISH else "put"
@@ -224,12 +228,22 @@ class DefinedRiskOptionsStrategy:
             ),
         )
 
-    def _quantity(self, per_contract_risk: Decimal, risk: OptionsRiskState) -> int:
+    def _quantity(
+        self,
+        per_contract_risk: Decimal,
+        risk: OptionsRiskState,
+        contracts: tuple[OptionSnapshot, ...],
+    ) -> int:
         if per_contract_risk <= 0:
             return 0
+        trade_risk_pct = min(self.config.max_trade_risk_pct, self.config.liquid_trade_risk_pct)
+        if per_contract_risk >= risk.equity * self.config.expensive_contract_equity_pct:
+            trade_risk_pct = min(trade_risk_pct, self.config.expensive_trade_risk_pct)
+        if any(item.spread_pct > Decimal("0.15") or item.volume < 20 for item in contracts):
+            trade_risk_pct = min(trade_risk_pct, self.config.illiquid_trade_risk_pct)
         cash_after_buffer = max(Decimal("0"), risk.cash - risk.equity * self.config.min_cash_buffer_pct)
         budgets = (
-            risk.equity * self.config.max_trade_risk_pct,
+            risk.equity * trade_risk_pct,
             risk.equity * self.config.max_total_risk_pct - risk.reserved_maximum_loss,
             risk.equity * self.config.max_underlying_risk_pct - risk.underlying_maximum_loss,
             risk.equity * self.config.max_correlation_risk_pct - risk.correlation_maximum_loss,

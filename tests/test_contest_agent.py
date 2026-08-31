@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,13 +14,13 @@ from agent_contracts import Direction  # noqa: E402
 from contest_agent import (  # noqa: E402
     ContestPaperAgent,
     _bounded_fresh_news,
+    _deterministic_market_signal,
     _direction_and_rank,
+    _eligible_contract_exists,
     _list_payload,
     _option_underlying,
     _order_underlyings,
-    _reconcile_candidate_direction,
 )
-from agent_contracts import AnalysisDisposition  # noqa: E402
 from execution_gateway import CliResponse  # noqa: E402
 from external_data import ProviderUnavailable  # noqa: E402
 from defined_risk_options import DiscoveryCandidate  # noqa: E402
@@ -55,30 +55,29 @@ def test_fresh_news_is_bounded_to_most_recent_items(monkeypatch):
     assert [item.record_id for item in bounded] == ["news.2", "news.3"]
 
 
-def test_direction_reconciles_to_unanimous_technical_and_catalyst_consensus():
-    discovered = DiscoveryCandidate(
-        symbol="AMD",
-        direction=Direction.BULLISH,
-        catalyst_evidence_ids=("evidence.catalyst",),
-        completed_bar_evidence_ids=("evidence.bar",),
-        correlation_group="broad_equity",
-        rank=Decimal("10"),
-    )
-    analyses = (
-        SimpleNamespace(agent_name="technical", direction=Direction.BEARISH, confidence=Decimal("0.80"), disposition=AnalysisDisposition.ANALYZE),
-        SimpleNamespace(agent_name="catalyst", direction=Direction.BEARISH, confidence=Decimal("0.75"), disposition=AnalysisDisposition.ANALYZE),
-        SimpleNamespace(agent_name="macro", direction=Direction.BEARISH, confidence=Decimal("0.70"), disposition=AnalysisDisposition.ANALYZE),
-    )
-
-    reconciled = _reconcile_candidate_direction(discovered, analyses, Decimal("0.50"))
-
-    assert reconciled.direction is Direction.BEARISH
-
-
 def test_option_selection_clock_is_not_frozen_to_cycle_start():
     source = inspect.getsource(ContestPaperAgent.run_once)
     assert "clock=lambda: datetime.now(timezone.utc)" in source
     assert "clock=lambda current=timestamp" not in source
+
+
+def test_optionability_gate_and_completed_bar_vwap_signal():
+    config = SimpleNamespace(min_dte=7, max_dte=21)
+    assert _eligible_contract_exists(
+        [{"expiration_date": "2026-09-11", "status": "active", "tradable": True}],
+        datetime(2026, 8, 31, 16, tzinfo=timezone.utc),
+        config,
+    )
+    assert not _eligible_contract_exists([], datetime(2026, 8, 31, 16, tzinfo=timezone.utc), config)
+    start = datetime(2026, 8, 31, 15, 50, tzinfo=timezone.utc)
+    bars = [
+        {"t": (start + timedelta(minutes=i)).isoformat(), "o": 100 + i, "h": 101 + i,
+         "l": 99 + i, "c": 100 + i, "v": 1000}
+        for i in range(6)
+    ]
+    signal = _deterministic_market_signal(bars, start + timedelta(minutes=7))
+    assert signal is not None
+    assert signal["direction"] is Direction.BULLISH
 
 
 def test_option_positions_and_multileg_orders_resolve_to_underlying():

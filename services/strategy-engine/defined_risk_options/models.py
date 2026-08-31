@@ -154,6 +154,10 @@ class DefinedRiskOptionsConfig:
     min_reward_risk: Decimal = Decimal("0.75")
     max_contracts: int = 4
     max_trade_risk_pct: Decimal = Decimal("0.01")
+    liquid_trade_risk_pct: Decimal = Decimal("0.03")
+    expensive_trade_risk_pct: Decimal = Decimal("0.025")
+    illiquid_trade_risk_pct: Decimal = Decimal("0.02")
+    expensive_contract_equity_pct: Decimal = Decimal("0.01")
     max_total_risk_pct: Decimal = Decimal("0.10")
     max_underlying_risk_pct: Decimal = Decimal("0.03")
     max_correlation_risk_pct: Decimal = Decimal("0.05")
@@ -183,6 +187,10 @@ class DefinedRiskOptionsConfig:
             "max_short_delta",
             "min_reward_risk",
             "max_trade_risk_pct",
+            "liquid_trade_risk_pct",
+            "expensive_trade_risk_pct",
+            "illiquid_trade_risk_pct",
+            "expensive_contract_equity_pct",
             "max_total_risk_pct",
             "max_underlying_risk_pct",
             "max_correlation_risk_pct",
@@ -224,6 +232,10 @@ class DefinedRiskOptionsConfig:
             min_reward_risk=Decimal(os.getenv("OPTIONS_MIN_REWARD_RISK", "0.75")),
             max_contracts=int(os.getenv("OPTIONS_MAX_CONTRACTS", "10")),
             max_trade_risk_pct=Decimal(os.getenv("OPTIONS_MAX_TRADE_RISK_PCT", "0.05")),
+            liquid_trade_risk_pct=Decimal(os.getenv("OPTIONS_LIQUID_TRADE_RISK_PCT", "0.03")),
+            expensive_trade_risk_pct=Decimal(os.getenv("OPTIONS_EXPENSIVE_TRADE_RISK_PCT", "0.025")),
+            illiquid_trade_risk_pct=Decimal(os.getenv("OPTIONS_ILLIQUID_TRADE_RISK_PCT", "0.02")),
+            expensive_contract_equity_pct=Decimal(os.getenv("OPTIONS_EXPENSIVE_CONTRACT_EQUITY_PCT", "0.01")),
             max_total_risk_pct=Decimal(os.getenv("OPTIONS_MAX_TOTAL_RISK_PCT", "0.50")),
             max_underlying_risk_pct=Decimal(os.getenv("OPTIONS_MAX_UNDERLYING_RISK_PCT", "0.15")),
             max_correlation_risk_pct=Decimal(os.getenv("OPTIONS_MAX_CORRELATION_RISK_PCT", "0.40")),

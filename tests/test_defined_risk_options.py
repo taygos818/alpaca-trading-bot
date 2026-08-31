@@ -305,7 +305,7 @@ def test_portfolio_gates_reject_before_structure_selection(risk_change, reason):
     assert reason in selection.reason
 
 
-def test_analysis_abstention_opposition_and_missing_citation_block_trade():
+def test_ai_is_secondary_veto_and_missing_citation_still_blocks_trade():
     _, _, analyses = frozen_context()
     abstain = replace(
         analyses[2],
@@ -313,11 +313,30 @@ def test_analysis_abstention_opposition_and_missing_citation_block_trade():
         direction=Direction.NEUTRAL,
         confidence=Decimal("0"),
     )
-    assert strategy().evaluate(candidate(), call_chain(), (*analyses[:2], abstain), risk(), NOW).proposal is None
-    opposed = replace(analyses[0], direction=Direction.BEARISH)
-    assert strategy().evaluate(candidate(), call_chain(), (opposed, *analyses[1:]), risk(), NOW).proposal is None
+    assert strategy().evaluate(candidate(), call_chain(), (*analyses[:2], abstain), risk(), NOW).proposal is not None
+    opposed_technical = replace(analyses[0], direction=Direction.BEARISH)
+    opposed_catalyst = replace(analyses[1], direction=Direction.BEARISH)
+    vetoed = strategy().evaluate(
+        candidate(), call_chain(), (opposed_technical, opposed_catalyst, analyses[2]), risk(), NOW
+    )
+    assert vetoed.proposal is None
+    assert "AI veto" in vetoed.reason
     uncited = replace(analyses[1], cited_evidence_ids=("evidence.bar",))
     assert strategy().evaluate(candidate(), call_chain(), (analyses[0], uncited, analyses[2]), risk(), NOW).proposal is None
+
+
+def test_expensive_spread_is_limited_to_two_and_a_half_percent_risk():
+    _, _, analyses = frozen_context(Direction.BEARISH)
+    expensive = (
+        snapshot("ANF260911P00475000", 475, "-0.55", right=OptionRight.PUT, bid="23.80", ask="23.90"),
+        snapshot("ANF260911P00440000", 440, "-0.30", right=OptionRight.PUT, bid="8.25", ask="8.35"),
+    )
+    proposal = strategy(max_contracts=10, max_trade_risk_pct=Decimal("0.05")).evaluate(
+        candidate(Direction.BEARISH), expensive, analyses, risk(), NOW
+    ).proposal
+    assert proposal is not None
+    assert proposal.contract_quantity == 1
+    assert proposal.maximum_loss <= Decimal("2500")
 
 
 def test_dynamic_builder_has_no_symbol_allowlist_and_preserves_rank_order():

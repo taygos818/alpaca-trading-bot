@@ -484,6 +484,80 @@ def test_frozen_partial_fill_reconciles_across_restart_without_duplicate_exit_pl
     assert PendingEntryStore(path).reconcile(filled, plans) == ()
 
 
+def test_unfilled_entry_is_canceled_after_signal_ttl(tmp_path, monkeypatch):
+    monkeypatch.setenv("PAPER_ENTRY_ORDER_TTL_SECONDS", "30")
+    execution, _ = execution_and_trace()
+    plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))
+    path = str(tmp_path / "pending-entries.jsonl")
+    initial = BrokerOrderSnapshot(
+        "paper-order.m6", execution.command.client_order_id, "new", 0, Decimal("0"), NOW
+    )
+    PendingEntryStore(path).track(execution, ("evidence.bar",), initial, plans)
+    gateway = FakeGateway(reconciled=broker_order("new"))
+
+    rows = PendingEntryStore(path).reconcile(gateway, plans)
+
+    assert rows[0]["status"] == "pending_cancel"
+    assert rows[0]["cancel_reason"] == "entry_signal_ttl"
+    assert "cancel" in gateway.calls
+
+
+def test_executable_exit_credit_uses_long_bid_and_short_ask():
+    execution, _ = execution_and_trace()
+    plan = ExitPlanFactory().for_filled_proposal(
+        execution.proposal,
+        filled_quantity=1,
+        entry_debit=Decimal("1.00"),
+        opened_at=NOW,
+        thesis_evidence_ids=("evidence.bar",),
+    )
+    quotes = {
+        execution.proposal.legs[0].option_symbol: {
+            "latestQuote": {"bp": "1.30", "ap": "1.40", "t": NOW.isoformat()}
+        },
+        execution.proposal.legs[1].option_symbol: {
+            "latestQuote": {"bp": "0.20", "ap": "0.25", "t": NOW.isoformat()}
+        },
+    }
+    assert CompetitionPositionLifecycle._executable_credit(plan, quotes, NOW) == Decimal("1.05")
+
+
+def test_stale_exit_is_canceled_once_for_quote_repricing(tmp_path, monkeypatch):
+    monkeypatch.setenv("PAPER_EXIT_REPRICE_SECONDS", "30")
+    execution, _ = execution_and_trace()
+    plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))
+    plans.save(ExitPlanFactory().for_filled_proposal(
+        execution.proposal,
+        filled_quantity=1,
+        entry_debit=Decimal("1.00"),
+        opened_at=NOW,
+        thesis_evidence_ids=("evidence.bar",),
+    ))
+    gateway = FakeGateway()
+    lifecycle = CompetitionPositionLifecycle(
+        BoundedPaperLauncher(
+            gateway,
+            PaperLaunchPolicy(submission_enabled=True, dry_run=False, bounded_ack="paper-contest"),
+        ),
+        plans,
+        PendingEntryStore(str(tmp_path / "pending.jsonl")),
+        ExitOrderStore(str(tmp_path / "exit-orders.jsonl")),
+    )
+    positions = [
+        {"symbol": execution.proposal.legs[0].option_symbol, "current_price": "1.60"},
+        {"symbol": execution.proposal.legs[1].option_symbol, "current_price": "0.05"},
+    ]
+    lifecycle.manage_exits(positions, NOW + timedelta(minutes=1))
+    client_id = next(iter(lifecycle.exit_orders.latest()))
+    gateway.reconciled_payload = broker_order("new", client_id=client_id)
+
+    lifecycle.manage_exits(positions, NOW + timedelta(minutes=2))
+    lifecycle.manage_exits(positions, NOW + timedelta(minutes=3))
+
+    assert gateway.calls.count("cancel") == 1
+    assert next(iter(lifecycle.exit_orders.latest().values()))["cancel_reason"] == "exit_reprice_ttl"
+
+
 def test_frozen_profit_exit_submits_reconciles_and_survives_restart(tmp_path):
     execution, _ = execution_and_trace()
     plans = JsonlExitPlanStore(str(tmp_path / "exit-plans.jsonl"))

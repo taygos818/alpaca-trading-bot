@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import json
 import os
@@ -111,12 +111,15 @@ class PendingEntryStore(_JsonlLatestStore):
             "planned_quantity": 0,
             "average_fill_price": format(snapshot.average_fill_price, "f"),
             "broker_timestamp": snapshot.broker_timestamp.isoformat(),
+            "submitted_at": snapshot.broker_timestamp.isoformat(),
         }
         self._apply_new_fill(row, plans)
         self.append(execution.command.client_order_id, row)
 
     def reconcile(self, gateway, plans: JsonlExitPlanStore) -> tuple[dict, ...]:
         changes = []
+        now = datetime.now(timezone.utc)
+        ttl_seconds = max(30, int(os.getenv("PAPER_ENTRY_ORDER_TTL_SECONDS", "90")))
         for client_id, row in self.latest().items():
             if row["status"] in {"filled", "canceled", "cancelled", "expired", "rejected"}:
                 continue
@@ -131,6 +134,16 @@ class PendingEntryStore(_JsonlLatestStore):
                 broker_timestamp=current.broker_timestamp.isoformat(),
             )
             self._apply_new_fill(row, plans)
+            submitted_at = _utc(row.get("submitted_at") or row["broker_timestamp"])
+            if (
+                current.status in {"new", "accepted", "pending_new", "partially_filled"}
+                and now - submitted_at >= timedelta(seconds=ttl_seconds)
+                and not row.get("cancel_requested_at")
+            ):
+                gateway.cancel_order(current.broker_order_id)
+                row["status"] = "pending_cancel"
+                row["cancel_reason"] = "entry_signal_ttl"
+                row["cancel_requested_at"] = now.isoformat()
             self.append(client_id, row)
             changes.append(row)
         return tuple(changes)
@@ -174,8 +187,16 @@ class CompetitionPositionLifecycle:
     def reconcile_entries(self) -> tuple[dict, ...]:
         return self.pending_entries.reconcile(self.launcher.gateway, self.plans)
 
-    def manage_exits(self, positions: list[dict], now: datetime) -> tuple[dict, ...]:
-        events = list(self._reconcile_exit_orders())
+    def manage_exits(
+        self,
+        positions: list[dict],
+        now: datetime,
+        *,
+        quote_provider=None,
+        thesis_provider=None,
+    ) -> tuple[dict, ...]:
+        events = list(self._reconcile_exit_orders(now))
+        quote_cache = {}
         active_exit_plan_ids = {
             row["plan_id"]
             for row in self.exit_orders.latest().values()
@@ -184,10 +205,22 @@ class CompetitionPositionLifecycle:
         for plan in self.plans.load_latest():
             if plan.state is ExitPlanState.CLOSED or plan.plan_id in active_exit_plan_ids:
                 continue
-            mark = self._mark(plan, positions)
+            if any(leg.option_symbol not in {str(item.get("symbol")) for item in positions} for leg in plan.legs):
+                continue
+            try:
+                if quote_provider is not None and plan.underlying not in quote_cache:
+                    quote_cache[plan.underlying] = quote_provider(plan.underlying)
+                snapshots = quote_cache.get(plan.underlying) if quote_provider is not None else None
+            except RuntimeError:
+                continue
+            mark = self._executable_credit(plan, snapshots, now) if snapshots is not None else self._mark(plan, positions)
             if mark is None:
                 continue
-            decision = self.decisions.assess(plan, current_mark=mark, now=now, thesis_valid=True)
+            try:
+                thesis_valid = thesis_provider(plan, now) if thesis_provider is not None else True
+            except RuntimeError:
+                thesis_valid = True
+            decision = self.decisions.assess(plan, current_mark=mark, now=now, thesis_valid=thesis_valid)
             force_at = os.getenv("COMPETITION_FORCE_FLATTEN_AT", "").strip()
             if force_at and now >= _utc(force_at):
                 decision = ExitDecision(
@@ -208,6 +241,10 @@ class CompetitionPositionLifecycle:
                         "status": result.snapshot.status,
                         "filled_quantity": result.snapshot.filled_quantity,
                         "broker_timestamp": result.snapshot.broker_timestamp.isoformat(),
+                        "broker_order_id": result.snapshot.broker_order_id,
+                        "submitted_at": now.isoformat(),
+                        "limit_credit": format(command.limit_credit, "f"),
+                        "reasons": list(decision.reasons),
                     },
                 )
                 if result.snapshot.status == "filled":
@@ -215,8 +252,9 @@ class CompetitionPositionLifecycle:
                 events.append({"plan_id": plan.plan_id, "status": result.snapshot.status, "reasons": decision.reasons})
         return tuple(events)
 
-    def _reconcile_exit_orders(self) -> tuple[dict, ...]:
+    def _reconcile_exit_orders(self, now: datetime) -> tuple[dict, ...]:
         events = []
+        reprice_seconds = max(15, int(os.getenv("PAPER_EXIT_REPRICE_SECONDS", "30")))
         plans = {plan.plan_id: plan for plan in self.plans.load_latest()}
         for client_id, row in self.exit_orders.latest().items():
             if row["status"] in {"filled", "canceled", "cancelled", "expired", "rejected"}:
@@ -228,7 +266,18 @@ class CompetitionPositionLifecycle:
                 status=snapshot.status,
                 filled_quantity=snapshot.filled_quantity,
                 broker_timestamp=snapshot.broker_timestamp.isoformat(),
+                broker_order_id=snapshot.broker_order_id,
             )
+            submitted_at = _utc(row.get("submitted_at") or row["broker_timestamp"])
+            if (
+                snapshot.status in {"new", "accepted", "pending_new", "partially_filled"}
+                and now - submitted_at >= timedelta(seconds=reprice_seconds)
+                and not row.get("cancel_requested_at")
+            ):
+                self.launcher.gateway.cancel_order(snapshot.broker_order_id)
+                row["status"] = "pending_cancel"
+                row["cancel_reason"] = "exit_reprice_ttl"
+                row["cancel_requested_at"] = now.isoformat()
             self.exit_orders.append(client_id, row)
             plan = plans.get(row["plan_id"])
             if plan is not None and snapshot.status == "filled":
@@ -251,3 +300,25 @@ class CompetitionPositionLifecycle:
             Decimal("0"),
             sum((prices[leg.option_symbol] if leg.side is LegSide.BUY else -prices[leg.option_symbol]) for leg in plan.legs),
         )
+
+    @staticmethod
+    def _executable_credit(plan, snapshots: dict[str, dict], now: datetime) -> Decimal | None:
+        if not isinstance(snapshots, dict):
+            return None
+        credit = Decimal("0")
+        maximum_age = timedelta(seconds=max(5, int(os.getenv("OPTIONS_MAX_QUOTE_AGE_SECONDS", "30"))))
+        for leg in plan.legs:
+            snapshot = snapshots.get(leg.option_symbol)
+            if not isinstance(snapshot, dict):
+                return None
+            quote = snapshot.get("latestQuote") or snapshot.get("latest_quote") or {}
+            try:
+                bid = Decimal(str(quote.get("bp") if quote.get("bp") is not None else quote["bid_price"]))
+                ask = Decimal(str(quote.get("ap") if quote.get("ap") is not None else quote["ask_price"]))
+                observed_at = _utc(str(quote.get("t") or quote.get("timestamp")))
+            except (KeyError, TypeError, ValueError):
+                return None
+            if bid <= 0 or ask < bid or not timedelta(0) <= now - observed_at <= maximum_age:
+                return None
+            credit += bid if leg.side is LegSide.BUY else -ask
+        return max(Decimal("0"), credit)

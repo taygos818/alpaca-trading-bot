@@ -175,6 +175,15 @@ def test_runtime_factory_exposes_only_three_research_agents():
     assert not hasattr(runtime, "risk_agent")
 
 
+def test_each_agent_prompt_has_a_distinct_mandate_and_confidence_rubric():
+    bundle, items = bundle_and_evidence()
+    prompts = {name: build_messages(name, bundle, items)[0]["content"] for name in ("technical", "catalyst", "macro")}
+    assert "completed Alpaca bars" in prompts["technical"]
+    assert "Finnhub company news" in prompts["catalyst"]
+    assert "FRED" in prompts["macro"]
+    assert all("Do not use a habitual default confidence" in value for value in prompts.values())
+
+
 def test_valid_response_becomes_typed_analysis_and_hash_only_audit():
     bundle, items = bundle_and_evidence()
     client, session, audit = client_for([FakeResponse(response_payload())])
