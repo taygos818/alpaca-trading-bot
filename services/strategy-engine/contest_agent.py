@@ -28,8 +28,6 @@ from external_data import (
     DataQualityEngine,
     FinnhubAdapter,
     FinnhubSettings,
-    FredAdapter,
-    FredSettings,
     ProviderUnavailable,
     YFinanceAdapter,
     YFinanceSettings,
@@ -219,7 +217,6 @@ class ContestPaperAgent:
             raise RuntimeError("contest agent requires the Alpaca market-data provider")
         self.finnhub = FinnhubAdapter(FinnhubSettings.from_env())
         self.yfinance = YFinanceAdapter(YFinanceSettings.from_env())
-        self.fred = FredAdapter(FredSettings.from_env())
         self.ai = build_featherless_analysis_runtime()
         submission = _flag("PAPER_ORDER_SUBMISSION_ENABLED")
         self.gateway = AlpacaCliGateway(
@@ -494,11 +491,6 @@ class ContestPaperAgent:
                 "yfinance",
                 YFinanceSettings.from_env().enabled,
                 lambda: self.yfinance.history(symbol, trace_id=trace_id, received_at=now)[-3:],
-            ),
-            (
-                "fred",
-                FredSettings.from_env().enabled,
-                lambda: self.fred.fetch("policy_rate", trace_id=trace_id, received_at=now),
             ),
         )
         for provider, enabled, fetch in providers:

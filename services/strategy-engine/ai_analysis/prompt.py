@@ -24,8 +24,8 @@ ROLE_MANDATES = {
         "can plausibly persist during this session. Do not infer technical patterns or option pricing."
     ),
     "macro": (
-        "Use only FRED or clearly macro evidence. Default to neutral when macro evidence does not directly affect this "
-        "symbol; oppose only when the supplied macro facts materially contradict the deterministic direction."
+        "Use only clearly broad-market or macro evidence supplied in the frozen bundle. Default to neutral when that "
+        "evidence does not directly affect this symbol; oppose only when supplied facts materially contradict the deterministic direction."
     ),
 }
 CONFIDENCE_RUBRIC = (

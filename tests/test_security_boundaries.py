@@ -22,7 +22,6 @@ def test_compose_is_isolated_and_paper_only():
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     assert "FINNHUB_ENABLED=false" in env_example
     assert "YFINANCE_ENABLED=false" in env_example
-    assert "FRED_ENABLED=false" in env_example
     assert "FEATHERLESS_ANALYSIS_ENABLED=false" in env_example
     assert "${FEATHERLESS_ANALYSIS_ENABLED" not in compose
     assert "ALPACA_ORDER_DRY_RUN: ${PAPER_ORDER_DRY_RUN:-true}" in compose
@@ -74,7 +73,6 @@ def test_agent_coordinator_is_credential_free_and_cli_gateway_is_narrow():
     assert 'forbidden = {"api", "close-all", "cancel-all", "locate"}' in gateway_source
     assert "finnhub" not in gateway_source.lower()
     assert "yfinance" not in gateway_source.lower()
-    assert "fred" not in gateway_source.lower()
     assert "featherless" not in gateway_source.lower()
 
 

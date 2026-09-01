@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from random import Random
 from typing import Protocol
 
@@ -54,18 +54,6 @@ def _parse_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _parse_series_map(raw_value: str | None) -> dict[str, str]:
-    if not raw_value:
-        return {"VIX": "VIXCLS"}
-
-    mapping: dict[str, str] = {}
-    for item in raw_value.split(","):
-        key, separator, value = item.partition(":")
-        if separator and key.strip() and value.strip():
-            mapping[key.strip().upper()] = value.strip()
-    return mapping or {"VIX": "VIXCLS"}
 
 
 def _calculate_ema(values: list[float], period: int) -> float:
@@ -179,9 +167,6 @@ class DataFeedSettings:
     options_max_dte: int = 21
     alpaca_api_key: str = ""
     alpaca_secret_key: str = ""
-    fred_api_url: str = "https://api.stlouisfed.org/fred"
-    fred_api_key: str = ""
-    fred_series_map: dict[str, str] = field(default_factory=lambda: {"VIX": "VIXCLS"})
     allow_mock_fallback: bool = True
     allow_mock_iv_rank: bool = True
     request_timeout_seconds: float = 10.0
@@ -206,9 +191,6 @@ class DataFeedSettings:
             options_max_dte=int(os.getenv("OPTIONS_MAX_DTE", "21")),
             alpaca_api_key=api_key,
             alpaca_secret_key=secret_key,
-            fred_api_url=os.getenv("FRED_API_URL", "https://api.stlouisfed.org/fred").rstrip("/"),
-            fred_api_key=os.getenv("FRED_API_KEY", ""),
-            fred_series_map=_parse_series_map(os.getenv("FRED_SERIES_MAP")),
             allow_mock_fallback=_parse_bool(os.getenv("ALLOW_MOCK_DATA_FALLBACK"), True),
             allow_mock_iv_rank=_parse_bool(os.getenv("ALLOW_MOCK_IV_RANK"), True),
             request_timeout_seconds=float(os.getenv("MARKET_DATA_TIMEOUT_SECONDS", "10")),
@@ -300,64 +282,6 @@ class MockMarketSnapshotProvider:
                 "greeks": {"delta": 0.25, "vega": 0.12}
             }
         }
-
-
-class FredMarketDataProvider:
-    def __init__(
-        self,
-        api_key: str,
-        base_url: str,
-        series_map: dict[str, str],
-        session: requests.Session | None = None,
-        timeout_seconds: float = 10.0,
-    ):
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self.series_map = {key.upper(): value for key, value in series_map.items()}
-        self.session = session or requests.Session()
-        self.timeout_seconds = timeout_seconds
-
-    def get_index_level(self, symbol: str) -> float:
-        series_id = self.series_map.get(symbol.upper())
-        if not series_id:
-            raise DataFeedUnavailable(f"No FRED mapping configured for {symbol}")
-
-        params = {
-            "series_id": series_id,
-            "file_type": "json",
-            "sort_order": "desc",
-            "limit": 10,
-        }
-        if self.api_key:
-            params["api_key"] = self.api_key
-
-        response = self.session.get(
-            f"{self.base_url}/series/observations",
-            params=params,
-            timeout=self.timeout_seconds,
-        )
-        response.raise_for_status()
-        observations = response.json().get("observations", [])
-        for observation in observations:
-            value = str(observation.get("value", "")).strip()
-            if value and value != ".":
-                return float(value)
-        raise DataFeedUnavailable(f"FRED returned no numeric observation for {symbol}")
-
-    def get_iv_rank(self, symbol: str) -> float:
-        raise DataFeedUnavailable(f"FRED does not provide IV Rank for {symbol}")
-
-    def get_ema_crossover(self, symbol: str, fast_period: int | None = None, slow_period: int | None = None) -> bool:
-        raise DataFeedUnavailable(f"FRED does not provide EMA data for {symbol}")
-
-    def get_rsi(self, symbol: str, period: int | None = None) -> float:
-        raise DataFeedUnavailable(f"FRED does not provide RSI data for {symbol}")
-
-    def get_intraday_roc(self, symbol: str) -> float:
-        raise DataFeedUnavailable(f"FRED does not provide intraday ROC for {symbol}")
-
-    def get_atr(self, symbol: str, period: int = 14) -> float:
-        raise DataFeedUnavailable(f"FRED does not provide ATR data for {symbol}")
 
 
 class AlpacaMarketDataProvider:
@@ -755,13 +679,11 @@ class HybridMarketSnapshotProvider:
     def __init__(
         self,
         alpaca: AlpacaMarketDataProvider | None = None,
-        fred: FredMarketDataProvider | None = None,
         fallback: MockMarketSnapshotProvider | None = None,
         allow_mock_fallback: bool = True,
         allow_mock_iv_rank: bool = True,
     ):
         self.alpaca = alpaca
-        self.fred = fred
         self.fallback = fallback
         self.allow_mock_fallback = allow_mock_fallback
         self.allow_mock_iv_rank = allow_mock_iv_rank
@@ -826,14 +748,10 @@ class HybridMarketSnapshotProvider:
         raise DataFeedUnavailable(f"No provider configured for {method_name}")
 
     def get_index_level(self, symbol: str) -> float:
-        providers: list[object] = []
-        if self.fred and symbol.upper() in self.fred.series_map:
-            providers.append(self.fred)
-        providers.append(self.alpaca)
         return self._call_with_fallback(
             "get_index_level",
             symbol,
-            providers=providers,
+            providers=[self.alpaca],
             allow_fallback=self.allow_mock_fallback,
         )
 
@@ -846,7 +764,7 @@ class HybridMarketSnapshotProvider:
         return self._call_with_fallback(
             "get_iv_rank",
             symbol,
-            providers=[self.alpaca, self.fred],
+            providers=[self.alpaca],
             allow_fallback=self.allow_mock_iv_rank,
         )
 
@@ -915,13 +833,6 @@ def build_market_snapshot_provider() -> MarketSnapshotProvider:
         options_min_dte=settings.options_min_dte,
         options_max_dte=settings.options_max_dte,
     )
-    fred_provider = FredMarketDataProvider(
-        api_key=settings.fred_api_key,
-        base_url=settings.fred_api_url,
-        series_map=settings.fred_series_map,
-        timeout_seconds=settings.request_timeout_seconds,
-    )
-
     if settings.provider == "alpaca":
         return HybridMarketSnapshotProvider(
             alpaca=alpaca_provider,
@@ -930,17 +841,8 @@ def build_market_snapshot_provider() -> MarketSnapshotProvider:
             allow_mock_iv_rank=settings.allow_mock_iv_rank,
         )
 
-    if settings.provider == "fred":
-        return HybridMarketSnapshotProvider(
-            fred=fred_provider,
-            fallback=mock_provider if settings.allow_mock_fallback else None,
-            allow_mock_fallback=settings.allow_mock_fallback,
-            allow_mock_iv_rank=settings.allow_mock_iv_rank,
-        )
-
     return HybridMarketSnapshotProvider(
         alpaca=alpaca_provider,
-        fred=fred_provider,
         fallback=mock_provider if settings.allow_mock_fallback else None,
         allow_mock_fallback=settings.allow_mock_fallback,
         allow_mock_iv_rank=settings.allow_mock_iv_rank,

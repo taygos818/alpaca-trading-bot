@@ -7,15 +7,6 @@ from .common import (
     ProviderUnavailable,
 )
 from .finnhub import FinnhubAdapter, FinnhubSettings
-from .fred import (
-    FRED_REGISTRY_VERSION,
-    FredAdapter,
-    FredSeriesDefinition,
-    FredSettings,
-    MacroAssessment,
-    MacroRegime,
-    MacroRegimeEngine,
-)
 from .quality import DataQualityEngine, DataQualityPolicy, DataQualityReport, EvidenceDisagreement
 from .yfinance_adapter import YFinanceAdapter, YFinanceSettings
 
@@ -24,15 +15,8 @@ __all__ = [
     "DataQualityPolicy",
     "DataQualityReport",
     "EvidenceDisagreement",
-    "FRED_REGISTRY_VERSION",
     "FinnhubAdapter",
     "FinnhubSettings",
-    "FredAdapter",
-    "FredSeriesDefinition",
-    "FredSettings",
-    "MacroAssessment",
-    "MacroRegime",
-    "MacroRegimeEngine",
     "MemoryEvidenceCache",
     "ProviderDisabled",
     "ProviderRateLimited",

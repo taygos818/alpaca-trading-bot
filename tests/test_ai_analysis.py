@@ -180,7 +180,7 @@ def test_each_agent_prompt_has_a_distinct_mandate_and_confidence_rubric():
     prompts = {name: build_messages(name, bundle, items)[0]["content"] for name in ("technical", "catalyst", "macro")}
     assert "completed Alpaca bars" in prompts["technical"]
     assert "Finnhub company news" in prompts["catalyst"]
-    assert "FRED" in prompts["macro"]
+    assert "broad-market or macro evidence" in prompts["macro"]
     assert all("Do not use a habitual default confidence" in value for value in prompts.values())
 
 

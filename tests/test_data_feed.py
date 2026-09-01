@@ -35,7 +35,6 @@ SPEC.loader.exec_module(data_feed)
 
 AlpacaMarketDataProvider = data_feed.AlpacaMarketDataProvider
 DataFeedUnavailable = data_feed.DataFeedUnavailable
-FredMarketDataProvider = data_feed.FredMarketDataProvider
 HybridMarketSnapshotProvider = data_feed.HybridMarketSnapshotProvider
 IndicatorSettings = data_feed.IndicatorSettings
 MockMarketSnapshotProvider = data_feed.MockMarketSnapshotProvider
@@ -63,7 +62,7 @@ class FakeSession:
 
     def get(self, url, headers=None, params=None, timeout=None):
         params = params or {}
-        key = (url, str(params.get("timeframe", params.get("series_id", ""))))
+        key = (url, str(params.get("timeframe", "")))
         self.calls.append(key)
         self.request_params.append(dict(params))
         payload = self.route_map[key]
@@ -79,29 +78,6 @@ def make_bars_ohlc(closes: list[float], highs: list[float], lows: list[float]) -
 
 
 class DataFeedTests(unittest.TestCase):
-    def test_fred_provider_reads_latest_numeric_observation(self):
-        session = FakeSession(
-            {
-                (
-                    "https://api.stlouisfed.org/fred/series/observations",
-                    "VIXCLS",
-                ): {
-                    "observations": [
-                        {"value": "."},
-                        {"value": "18.42"},
-                    ]
-                }
-            }
-        )
-        provider = FredMarketDataProvider(
-            api_key="fred-key",
-            base_url="https://api.stlouisfed.org/fred",
-            series_map={"VIX": "VIXCLS"},
-            session=session,
-        )
-
-        self.assertAlmostEqual(provider.get_index_level("VIX"), 18.42)
-
     def test_alpaca_provider_computes_indicators_from_bar_history(self):
         session = FakeSession(
             {
@@ -211,7 +187,6 @@ class DataFeedTests(unittest.TestCase):
     def test_hybrid_provider_raises_without_fallback(self):
         provider = HybridMarketSnapshotProvider(
             alpaca=None,
-            fred=None,
             fallback=None,
             allow_mock_fallback=False,
             allow_mock_iv_rank=False,
@@ -406,4 +381,3 @@ class DataFeedVolatilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

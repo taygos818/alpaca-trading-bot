@@ -54,20 +54,6 @@ def download_alpaca_bars(symbol: str, api_key: str, secret_key: str, start_date:
             
     return bars
 
-def download_fred_vix(api_key: str, start_date: str) -> list[dict]:
-    # FRED VIXCLS Series
-    url = "https://api.stlouisfed.org/fred/series/observations"
-    params = {
-        "series_id": "VIXCLS",
-        "file_type": "json",
-        "sort_order": "asc",
-        "observation_start": start_date,
-        "api_key": api_key
-    }
-    response = requests.get(url, params=params, timeout=15)
-    response.raise_for_status()
-    return response.json().get("observations", [])
-
 def main():
     parser = argparse.ArgumentParser(description="Download historical data for backtesting")
     parser.add_argument("--days", type=int, default=180, help="Number of lookback days")
@@ -80,7 +66,6 @@ def main():
 
     api_key = os.getenv("ALPACA_API_KEY")
     secret_key = os.getenv("ALPACA_SECRET_KEY")
-    fred_key = os.getenv("FRED_API_KEY")
 
     if not api_key or not secret_key:
         print("Error: ALPACA_API_KEY and ALPACA_SECRET_KEY must be configured in env files.")
@@ -109,19 +94,6 @@ def main():
             print(f"    Saved {len(bars)} bars to {output_file.name}")
         except Exception as exc:
             print(f"    Failed to download {symbol}: {exc}")
-
-    if fred_key:
-        try:
-            print(" -> Downloading FRED VIX index observations...")
-            vix_data = download_fred_vix(fred_key, start_str)
-            output_file = output_dir / "VIX_daily.json"
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(vix_data, f, indent=2)
-            print(f"    Saved {len(vix_data)} observations to {output_file.name}")
-        except Exception as exc:
-            print(f"    Failed to download VIX from FRED: {exc}")
-    else:
-        print("Note: FRED_API_KEY not found. Skipping VIX historical download (will use default mock VIX cls).")
 
 if __name__ == "__main__":
     main()

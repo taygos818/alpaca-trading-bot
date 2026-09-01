@@ -10,7 +10,6 @@ if str(SERVICE_DIR) not in sys.path:
 
 from utils.data_feed import (
     AlpacaMarketDataProvider,
-    FredMarketDataProvider,
     IndicatorSettings,
 )
 
@@ -20,24 +19,6 @@ from utils.data_feed import (
     "Set RUN_LIVE_INTEGRATION_TESTS=true to opt in to external API tests",
 )
 class IntegrationFeedsTests(unittest.TestCase):
-
-    def test_fred_real_fetch(self):
-        fred_key = os.environ.get("FRED_API_KEY")
-        if not fred_key:
-            self.skipTest("No FRED_API_KEY found in env")
-
-        provider = FredMarketDataProvider(
-            api_key=fred_key,
-            base_url="https://api.stlouisfed.org/fred",
-            series_map={"VIX": "VIXCLS"},
-        )
-        try:
-            vix_level = provider.get_index_level("VIX")
-            self.assertIsInstance(vix_level, float)
-            self.assertGreater(vix_level, 0.0)
-            print(f"\n[Integration Test] Real FRED VIX observation fetched: {vix_level}")
-        except Exception as exc:
-            self.skipTest(f"FRED API request unavailable ({type(exc).__name__})")
 
     def test_alpaca_real_fetch(self):
         api_key = os.environ.get("ALPACA_API_KEY")

@@ -7,7 +7,7 @@ Autonomously discover, evaluate, structure, execute, and manage defined-risk opt
 ## Agent topology
 
 ```text
-Alpaca + Finnhub + yfinance + FRED
+    Alpaca + Finnhub + yfinance
                  |
         Data Quality Agent
                  |

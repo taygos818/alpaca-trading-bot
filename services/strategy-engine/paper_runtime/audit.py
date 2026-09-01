@@ -17,7 +17,6 @@ FORBIDDEN_KEYS = {
     "alpaca_secret_key",
     "featherless_api_key",
     "finnhub_api_key",
-    "fred_api_key",
 }
 
 

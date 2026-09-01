@@ -16,13 +16,8 @@ from agent_contracts import ContractValidationError  # noqa: E402
 from external_data import (  # noqa: E402
     DataQualityEngine,
     DataQualityPolicy,
-    FRED_REGISTRY_VERSION,
     FinnhubAdapter,
     FinnhubSettings,
-    FredAdapter,
-    FredSettings,
-    MacroRegime,
-    MacroRegimeEngine,
     MemoryEvidenceCache,
     ProviderDisabled,
     ProviderRateLimited,
@@ -237,75 +232,6 @@ def test_each_external_provider_flag_fails_closed_independently():
         )
     with pytest.raises(ProviderDisabled):
         YFinanceAdapter(YFinanceSettings(enabled=False)).history("AAPL", trace_id="trace.001", received_at=NOW)
-    with pytest.raises(ProviderDisabled):
-        FredAdapter(FredSettings(enabled=False)).fetch("policy_rate", trace_id="trace.001", received_at=NOW)
-
-
-def fred_session(value="4.25", observation_date="2026-08-27", vintage="2026-08-28"):
-    return FakeSession(
-        {
-            "https://api.stlouisfed.org/fred/series/observations": FakeResponse(
-                {"observations": [{"date": observation_date, "value": value, "realtime_start": vintage, "realtime_end": vintage}]}
-            ),
-            "https://api.stlouisfed.org/fred/series/vintagedates": FakeResponse({"vintage_dates": [vintage]}),
-        }
-    )
-
-
-def test_fred_evidence_includes_registry_transformation_and_vintage():
-    session = fred_session()
-    adapter = FredAdapter(FredSettings(enabled=True, api_key="fred-key"), session=session)
-    item = adapter.fetch("policy_rate", trace_id="trace.001", received_at=NOW)[0]
-    assert item.numeric_value == Decimal("4.25")
-    assert item.vintage == "2026-08-28"
-    assert item.transformation_version == FRED_REGISTRY_VERSION
-    assert item.authority == "macro_research"
-    assert session.calls[0]["params"]["units"] == "lin"
-
-
-def test_fred_series_specific_staleness_is_preserved_for_veto():
-    adapter = FredAdapter(
-        FredSettings(enabled=True, api_key="fred-key"),
-        session=fred_session(observation_date="2026-07-01"),
-    )
-    item = adapter.fetch("policy_rate", trace_id="trace.001", received_at=NOW)[0]
-    assert item.is_fresh is False
-
-
-def macro_item(key, value):
-    return make_evidence(
-        provider="fred",
-        trace_id="trace.macro",
-        instrument=f"FRED:{key}",
-        event_time=NOW - timedelta(days=1),
-        received_at=NOW,
-        value_name=f"fred.{key}",
-        payload={"value": str(value)},
-        source_uri="https://fred.test",
-        entitlement="fred-api",
-        is_fresh=True,
-        authority="macro_research",
-        session="daily",
-        temporal_kind="release",
-        transformation_version=FRED_REGISTRY_VERSION,
-        numeric_value=Decimal(str(value)),
-    )
-
-
-def test_macro_regime_is_deterministic_and_missing_data_is_conservative():
-    risk_off = MacroRegimeEngine().evaluate(
-        (
-            macro_item("yield_curve", "-0.25"),
-            macro_item("credit_stress", "5.50"),
-            macro_item("financial_conditions", "0.75"),
-        )
-    )
-    assert risk_off.regime is MacroRegime.RISK_OFF
-    assert risk_off.sleeve_multiplier == Decimal("0.25")
-    neutral = MacroRegimeEngine().evaluate(())
-    assert neutral.regime is MacroRegime.NEUTRAL
-    assert neutral.sleeve_multiplier == Decimal("0.50")
-    assert "policy_rate" in neutral.missing_series
 
 
 def numeric_evidence(provider, value, *, fresh=True, authority="licensed_research"):

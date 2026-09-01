@@ -26,7 +26,7 @@ Rollback: disable the coordinator and keep submission disabled.
 
 ## Milestone 3 — External data and provenance
 
-Implement Finnhub, yfinance, FRED, and centralized data-quality milestones described in `DATA_PROVIDER_PLAN.md`.
+Implement Finnhub, yfinance, and centralized data-quality milestones described in `DATA_PROVIDER_PLAN.md`.
 
 Acceptance: entitlement, staleness, disagreement, outage, caching, provenance, and replay tests pass.
 

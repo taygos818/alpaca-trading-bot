@@ -13,6 +13,6 @@ The console shows:
 - evidence provider, instrument, event type, authority, freshness, and entitlement;
 - the immutable replay fingerprint used to reconstruct the decision.
 
-The dashboard container receives no Alpaca, Featherless, Finnhub, FRED, Robinhood, database, or Redis credentials. It mounts the strategy log directory read-only and exposes no start, stop, submit, cancel, replace, exercise, or close route. Stopping or rolling back `monitor-dash` cannot affect order reconciliation or position management.
+The dashboard container receives no Alpaca, Featherless, Finnhub, Robinhood, database, or Redis credentials. It mounts the strategy log directory read-only and exposes no start, stop, submit, cancel, replace, exercise, or close route. Stopping or rolling back `monitor-dash` cannot affect order reconciliation or position management.
 
 Local URL: `http://127.0.0.1:8090/agents` by default. Override only the loopback port with `PAPER_DASHBOARD_PORT`.

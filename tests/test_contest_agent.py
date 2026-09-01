@@ -132,17 +132,13 @@ def test_compose_runs_contest_entrypoint_with_default_off_submission():
 
 def test_optional_research_failure_is_recorded_without_blocking_candidate(monkeypatch):
     monkeypatch.setenv("YFINANCE_ENABLED", "true")
-    monkeypatch.setenv("FRED_ENABLED", "true")
     agent = ContestPaperAgent.__new__(ContestPaperAgent)
     agent.yfinance = SimpleNamespace(
         history=lambda *args, **kwargs: (_ for _ in ()).throw(ProviderUnavailable("missing optional module"))
     )
-    fred_item = SimpleNamespace(provider="fred")
-    agent.fred = SimpleNamespace(fetch=lambda *args, **kwargs: (fred_item,))
-
     research, failures = agent._optional_research("AAL", "trace.optional", datetime.now(timezone.utc))
 
-    assert research == [fred_item]
+    assert research == []
     assert failures == [{
         "provider": "yfinance",
         "error_type": "ProviderUnavailable",
