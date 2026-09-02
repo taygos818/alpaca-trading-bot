@@ -128,6 +128,8 @@ def test_compose_runs_contest_entrypoint_with_default_off_submission():
     assert 'command: ["python", "contest_agent.py"]' in engine
     assert "PAPER_ORDER_SUBMISSION_ENABLED: ${PAPER_ORDER_SUBMISSION_ENABLED:-false}" in engine
     assert "DEFINED_RISK_OPTIONS_ENABLED: ${DEFINED_RISK_OPTIONS_ENABLED:-false}" in engine
+    assert "CONTEST_OPTIONS_THESIS_EXIT_ENABLED: ${CONTEST_OPTIONS_THESIS_EXIT_ENABLED:-false}" in engine
+    assert "OPTIONS_MAX_CONTRACTS: ${CONTEST_OPTIONS_MAX_CONTRACTS:-25}" in engine
 
 
 def test_optional_research_failure_is_recorded_without_blocking_candidate(monkeypatch):

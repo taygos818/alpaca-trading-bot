@@ -261,7 +261,11 @@ class ContestPaperAgent:
             positions,
             datetime.now(timezone.utc),
             quote_provider=self.data.get_option_chain_snapshots,
-            thesis_provider=self._underlying_thesis_valid,
+            thesis_provider=(
+                self._underlying_thesis_valid
+                if _flag("CONTEST_OPTIONS_THESIS_EXIT_ENABLED", True)
+                else None
+            ),
         )
         if reconciled or exits:
             LOGGER.info("Lifecycle reconciliation entries=%d exits=%d", len(reconciled), len(exits))

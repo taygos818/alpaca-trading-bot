@@ -86,6 +86,8 @@ class FinnhubAdapter:
             if not isinstance(item, dict) or not item.get("datetime") or not item.get("headline"):
                 continue
             event_time = utc_datetime(item["datetime"])
+            if event_time > received_at:
+                continue
             normalized = {
                 "category": str(item.get("category") or ""),
                 "headline": str(item["headline"]),

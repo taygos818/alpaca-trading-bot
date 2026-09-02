@@ -145,6 +145,20 @@ def test_finnhub_stale_news_is_visible_for_quality_veto():
     assert DataQualityEngine().evaluate((item,), NOW).veto is True
 
 
+def test_finnhub_future_news_is_ignored_instead_of_invalidating_candidate():
+    session = FakeSession(
+        {
+            "https://finnhub.io/api/v1/company-news": FakeResponse(
+                [{"datetime": int((NOW + timedelta(minutes=1)).timestamp()), "headline": "Future-stamped event"}]
+            )
+        }
+    )
+    adapter = FinnhubAdapter(FinnhubSettings(enabled=True, api_key="key"), session=session)
+    assert adapter.company_news(
+        "AAPL", date(2026, 8, 28), date(2026, 8, 28), trace_id="trace.001", received_at=NOW
+    ) == ()
+
+
 def test_finnhub_future_earnings_is_scheduled_evidence():
     session = FakeSession(
         {
