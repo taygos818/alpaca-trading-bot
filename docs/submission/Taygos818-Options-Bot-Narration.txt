@@ -1,19 +1,33 @@
-Meet Taygos818 Options Bot: an autonomous, multi-agent system built for the Alpaca AI Trading Agents Hackathon.
+Meet the Taygos eight-one-eight Options Bot.
 
-The goal was not to automate a fixed watchlist. The bot searches a dynamic universe of U.S. equities, finds unusual market activity, checks whether each symbol supports options, and freezes the supporting market and catalyst evidence before any artificial intelligence sees it.
+We built it for a short, aggressive paper-trading competition on Alpaca. The goal wasn't to automate a fixed watchlist. It was to search the broader U.S. market, spot unusual activity, and turn that evidence into options trades—with every decision recorded.
 
-Three independent agents then examine the same evidence. The technical agent evaluates completed price bars, VWAP, opening-range behavior, trend, and volume. The catalyst agent decides whether news or unusual activity could persist through the session. The macro agent looks for supplied broad-market evidence and stays neutral when none exists. Every agent must return structured data, cite the exact evidence it used, and may abstain when the case is weak.
+Here's how it works.
 
-Artificial intelligence does not control the brokerage account. It cannot size a position, change a risk limit, invent a contract, or send an order. Deterministic code converts an agreed direction into a call or put debit spread, validates expiration, delta, liquidity, bid-ask width, reward versus risk, and maximum possible loss. An adversarial reviewer can object, and the portfolio risk engine has final veto authority.
+First, the discovery engine finds active stocks and confirms that they support tradable options. It collects price, volume, market structure, and catalyst data, then freezes that evidence before any AI agent reviews it.
 
-Only a signed authorization reaches the pinned Alpaca command-line gateway. The gateway is permanently restricted to the paper endpoint. It previews and submits structured limit orders, prevents duplicates with deterministic client order identifiers, and reconciles new orders, partial fills, cancellations, positions, and restarts.
+Three independent agents look at the same snapshot from different angles. The technical agent studies completed bars, VWAP, opening-range behavior, trend, and volume. The catalyst agent asks whether the news or unusual activity could continue. And the macro agent evaluates the broader market—staying neutral when the evidence isn't there.
 
-This dashboard is the bot's evidence trail. The heartbeat confirms the engine is running. The counters summarize recent traces, proposals, risk rejections, orders, and positions. Every opportunity is searchable and filterable. Selecting one reconstructs its ranking, independent-agent findings, chosen structure, deterministic risk outcome, paper-order lifecycle, position state, exit status, and evidence provenance.
+The agents can recommend a direction, disagree, or simply abstain. But they never control the brokerage account.
 
-The expandable activity log shows real lifecycle events, including submitted exits, pending orders, and confirmed fills. It is read-only and receives no broker credentials, so observability cannot become an execution backdoor.
+Deterministic code selects a call or put debit spread and checks the expiration, delta, liquidity, bid-ask width, reward-to-risk ratio, and maximum possible loss. An adversarial reviewer can object. The portfolio risk engine has final veto power.
 
-Across the competition snapshot, the system recorded twenty-five thousand one hundred thirty-six unique decision traces, made eight thousand six hundred seventy-seven Featherless requests, submitted sixty entries and thirty exits, and recorded one hundred twenty-two option-leg fills. Alpaca reported no rejected orders.
+Only an approved, signed instruction reaches Alpaca's command-line gateway. That gateway is locked to paper trading. It uses repeatable order identifiers to prevent duplicates, and it reconciles submissions, partial fills, cancellations, positions, exits, and restarts.
 
-The result was not profitable. The account moved from one hundred thousand dollars to eighty-six thousand three hundred twenty-one dollars and seventy-nine cents, a loss of thirteen point six eight percent. The aggressive contest profile exposed weaknesses in catalyst quality, retries, option-spread execution, and position sizing. A forced-flatten defect also left nine spreads open after unfilled exit limits reached the closing bell.
+This dashboard is the bot's flight recorder.
 
-That honesty is part of the system. Taygos818 Options Bot does not merely show what it traded. It preserves why it acted, why it abstained, what risk approved, how Alpaca responded, and where the implementation failed. It is autonomous trading with a complete, inspectable record.
+The heartbeat shows whether the engine is healthy. The top-level counters summarize decisions, risk outcomes, orders, and positions. Click into an opportunity and you can reconstruct the entire chain: why it ranked, what each agent concluded, which spread was selected, what risk approved, how Alpaca responded, and whether the position exited successfully.
+
+The activity log shows the same lifecycle in real time. And because the dashboard is read-only, observability can't become an execution backdoor.
+
+During the competition snapshot, the bot recorded more than twenty-five thousand decision traces, made over eighty-six hundred Featherless requests, submitted sixty entries and thirty exits, and captured one hundred twenty-two option-leg fills. Alpaca reported zero rejected orders.
+
+The financial result, though, was a loss. The account fell from one hundred thousand dollars to eighty-six thousand, three hundred twenty-one dollars and seventy-nine cents—a decline of thirteen point six eight percent.
+
+That's not the ending we wanted. But hiding it would miss the point.
+
+The run exposed real weaknesses: noisy catalyst attribution, excessive retries, spread execution, aggressive sizing, and a forced-flatten defect that left nine spreads open after exit limits went unfilled near the closing bell.
+
+Taygos eight-one-eight Options Bot doesn't just show what it traded. It preserves why it acted, why it abstained, what risk approved, how Alpaca responded, and where the system failed.
+
+That's autonomous trading—with an evidence trail you can actually inspect.
