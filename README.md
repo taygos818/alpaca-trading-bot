@@ -30,6 +30,13 @@ The read-only dashboard makes every autonomous decision inspectable. It displays
 
 Selecting a trace reconstructs the complete redacted path from market evidence through autonomous analysis, deterministic risk oversight, execution, and position management. See [Agent Decision Dashboard](docs/AGENT_DASHBOARD.md) for operating details.
 
+## Hackathon submission media
+
+- [Narrated screen-led demo (MP4)](docs/submission/Taygos818-Options-Bot-Demo.mp4)
+- [Eight-slide presentation (PDF)](docs/submission/Taygos818-Options-Bot-Hackathon-Deck.pdf)
+- [Narration transcript](docs/submission/Taygos818-Options-Bot-Narration.txt)
+- [Taygos818 Options Bot cover](docs/submission/Taygos818-Options-Bot-Cover.png)
+
 ## Bootstrap
 
 1. Copy `.env.example` to `.env.paper.secrets`.
